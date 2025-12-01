@@ -40,6 +40,11 @@ const STATUS = [
   { label: 'Suspended ', value: 2 },
   { label: 'Disabled ', value: 3 },
 ];
+const Gender = [
+  { label: 'Male ', value: 'Male' },
+  { label: 'Female ', value: 'Female' },
+  { label: 'None ', value: 'None' },
+];
 
 // twoFactorEnabled: 0=off, 1=app, 2=email
 const TWO_FA = [
@@ -269,14 +274,20 @@ export default function EditPartnerFormDialog({ open, onClose, id, onSuccess, se
 
           <Grid item xs={12} sm={4}>
             <TextField
+              select
               label="Gender"
               fullWidth
               value={form.gender}
               onChange={handleChange('gender')}
               InputLabelProps={{ shrink: true }}
-            />
+            >
+              {Gender.map((s) => (
+                <MenuItem key={s.value} value={s.value}>
+                  {s.label}
+                </MenuItem>
+              ))}
+            </TextField>
           </Grid>
-
           <Grid item xs={12} sm={4}>
             <TextField
               label="Country"
@@ -296,7 +307,7 @@ export default function EditPartnerFormDialog({ open, onClose, id, onSuccess, se
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-
+        
           <Grid item xs={12} sm={4}>
             <TextField
               select
