@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -54,7 +54,6 @@ import { DashboardContent } from 'src/layouts/dashboard';
 
 import { Iconify } from 'src/components/iconify';
 import { TableNoData } from 'src/components/table';
-import { DeletedChip } from 'src/components/chip/deleted-chip';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import PartnerSelector from 'src/components/selectors/inventory/partner-selector';
 import PublisherSelector from 'src/components/selectors/inventory/publisher-selector';
@@ -111,6 +110,7 @@ const DEFAULT_FILTERS = {
   status: '',
   partnerStatus: '',
   adsTxtStatus: '',
+  is_deleted: '',
   sortBy: 'updatedAt',
   sortDir: 'desc',
 };
@@ -127,6 +127,7 @@ function buildQuery(filters) {
     status: filters.status,
     partnerStatus: filters.partnerStatus,
     adsTxtStatus: filters.adsTxtStatus,
+    is_deleted: filters.is_deleted,
   };
   Object.entries(numericMap).forEach(([k, v]) => {
     if (v !== '' && v !== null && v !== undefined) {
@@ -155,12 +156,21 @@ function Labeled({ label, children }) {
 
 export default function InventoryView() {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // 🔹 Derive type from last path segment: /inventory/web, /inventory/ott, /inventory/app, /inventory/all
+  // 🔹 /inventory/deleted ?
+  const isDeletedRoute = useMemo(() => {
+    if (!pathname) return false;
+    const cleanPath = pathname.split('?')[0].split('#')[0];
+    const segments = cleanPath.split('/').filter(Boolean);
+    const last = segments[segments.length - 1] || '';
+    return last === 'deleted';
+  }, [pathname]);
+
+  // 🔹 route type (WEB / APP / OTT_CTV)
   const routeType = useMemo(() => {
     if (!pathname) return '';
 
-    // strip query / hash just in case
     const cleanPath = pathname.split('?')[0].split('#')[0];
     const segments = cleanPath.split('/').filter(Boolean);
     const last = segments[segments.length - 1] || '';
@@ -169,16 +179,16 @@ export default function InventoryView() {
     if (last === 'ott') return 'OTT_CTV';
     if (last === 'web') return 'WEB';
 
-    // /inventory or /inventory/all or anything else → all types
     return '';
   }, [pathname]);
 
   const pageTitle = useMemo(() => {
+    if (isDeletedRoute) return 'Inventory - Deleted';
     if (routeType === 'APP') return 'Inventory - App';
     if (routeType === 'WEB') return 'Inventory - Web';
     if (routeType === 'OTT_CTV') return 'Inventory - OTT/CTV';
     return 'Inventory';
-  }, [routeType]);
+  }, [routeType, isDeletedRoute]);
 
   const token = useMemo(() => getCookie('session_key'), []);
   const headers = useMemo(
@@ -203,7 +213,6 @@ export default function InventoryView() {
   const [viewMode, setViewMode] = useState('list');
   const [searchText, setSearchText] = useState('');
 
-  // Quick status filter state
   const [quickStatus, setQuickStatus] = useState('all');
   const [statusCounts, setStatusCounts] = useState({
     all: 0,
@@ -227,13 +236,15 @@ export default function InventoryView() {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // NOTES STATE
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesInventory, setNotesInventory] = useState(null);
 
-  // MENU STATE (for list card 3-dots)
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const [menuRow, setMenuRow] = useState(null);
+
+  // 🔹 NEW: Restore confirmation state
+  const [restoreRow, setRestoreRow] = useState(null);
+  const [restoring, setRestoring] = useState(false);
 
   const openMenu = (event, row) => {
     setMenuAnchorEl(event.currentTarget);
@@ -294,7 +305,6 @@ export default function InventoryView() {
     [headers, listUrlBase]
   );
 
-  // fetchStatusCounts (for quick filter counts)
   const fetchStatusCounts = useCallback(
     async (baseFilters) => {
       try {
@@ -361,16 +371,16 @@ export default function InventoryView() {
     }
   }, [headers, uiSettingUrl]);
 
-  // 🔹 Fetch view mode ONCE on mount
   useEffect(() => {
     fetchViewMode();
   }, [fetchViewMode]);
 
-  // 🔹 Initial load + re-run when routeType changes (All/Web/OTT/App)
+  // 🔹 Initial load + when route changes
   useEffect(() => {
     const initialFilters = {
       ...DEFAULT_FILTERS,
       type: routeType || '',
+      is_deleted: isDeletedRoute ? 1 : 0,
     };
 
     setFilters(initialFilters);
@@ -380,7 +390,7 @@ export default function InventoryView() {
 
     fetchInventories(initialFilters, 1, true);
     fetchStatusCounts(initialFilters);
-  }, [routeType, fetchInventories, fetchStatusCounts]);
+  }, [routeType, isDeletedRoute, fetchInventories, fetchStatusCounts]);
 
   const handleToggleViewMode = async () => {
     const current = viewMode;
@@ -423,6 +433,7 @@ export default function InventoryView() {
     const next = {
       ...DEFAULT_FILTERS,
       type: routeType || '',
+      is_deleted: isDeletedRoute ? 1 : 0,
     };
     setFilters(next);
     setQuickStatus('all');
@@ -453,17 +464,26 @@ export default function InventoryView() {
 
   const handleDelete = (id) => setDeleteId(id);
 
+  // 🔵 SOFT DELETE → set is_deleted = 1 (stays on same tab; backend already handles)
   const confirmDelete = async () => {
     if (!deleteId) return;
+
     try {
       setDeleting(true);
-      const res = await axios.delete(`${listUrlBase}/${deleteId}`, {
-        headers,
-        validateStatus: () => true,
-      });
+
+      const res = await axios.put(
+        `${listUrlBase}/${deleteId}`,
+        { is_deleted: 1 },
+        {
+          headers,
+          validateStatus: () => true,
+        }
+      );
+
       if (res?.data?.success) {
-        toast.success(res?.data?.msg || 'Inventory deleted');
+        toast.success(res?.data?.msg || 'Inventory moved to Deleted');
         setDeleteId(null);
+
         fetchInventories(filters, currentPage, true);
         fetchStatusCounts(filters);
       } else {
@@ -497,20 +517,67 @@ export default function InventoryView() {
     }
   };
 
-  // quick filter click
-  const handleQuickStatusChange = (key) => {
-    setQuickStatus(key);
+  // 🔵 RESTORE LOGIC – actual API + redirect to /all
+  const handleRestore = async (row) => {
+    if (!row?.id) return;
 
-    let statusVal = '';
-    if (key === 'approved') statusVal = 1;
-    else if (key === 'pending') statusVal = 0;
-    else if (key === 'rejected') statusVal = 2;
+    try {
+      setIsLoading(true);
 
-    const nextFilters = { ...filters, status: statusVal };
-    setFilters(nextFilters);
-    setCurrentPage(1);
-    cacheRef.current = {};
-    fetchInventories(nextFilters, 1, true);
+      const res = await axios.put(
+        `${listUrlBase}/${row.id}`,
+        { is_deleted: 0 },
+        {
+          headers,
+          validateStatus: () => true,
+        }
+      );
+
+      if (!res?.data?.success) {
+        toast.error(res?.data?.msg || res?.data?.message || 'Failed to restore inventory');
+        return;
+      }
+
+      // Remove from current deleted list
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+
+      toast.success('Inventory restored');
+
+      // Build filters for /all
+      const allFilters = {
+        ...DEFAULT_FILTERS,
+        type: '',
+        is_deleted: 0,
+      };
+
+      cacheRef.current = {};
+      setFilters(allFilters);
+      setCurrentPage(1);
+      await fetchInventories(allFilters, 1, true);
+      await fetchStatusCounts(allFilters);
+
+      const allPath =
+        paths.dashboard.inventory?.all || paths.dashboard.inventory?.root || '/dashboard/inventory';
+
+      router.replace(allPath);
+    } catch (err) {
+      console.error('handleRestore error:', err);
+      toast.error('Failed to restore inventory');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 🔵 CONFIRM RESTORE – called when user clicks "Restore" in dialog
+  const confirmRestore = async () => {
+    if (!restoreRow) return;
+    try {
+      setRestoring(true);
+      await handleRestore(restoreRow);
+      setRestoreRow(null);
+    } finally {
+      setRestoring(false);
+    }
   };
 
   const handleClickUpload = () => {
@@ -605,6 +672,7 @@ export default function InventoryView() {
 
   return (
     <DashboardContent maxWidth="xl">
+      {/* HEADER */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <CustomBreadcrumbs
           heading={pageTitle}
@@ -642,10 +710,10 @@ export default function InventoryView() {
         </Box>
       </Box>
 
+      {/* FILTERS */}
       <Collapse in={showFilter} timeout="auto" unmountOnExit>
         <Card sx={{ p: 2, mb: 2 }}>
           <Grid container spacing={2} alignItems="center">
-            {/* Publisher selector → sets publisherId from selected inventory */}
             <Grid item xs={12} sm={6} md={3}>
               <PublisherSelector
                 label="Publisher"
@@ -661,7 +729,6 @@ export default function InventoryView() {
               />
             </Grid>
 
-            {/* Partner selector → sets partnerId from selected inventory */}
             <Grid item xs={12} sm={6} md={3}>
               <PartnerSelector
                 label="Partner"
@@ -854,7 +921,7 @@ export default function InventoryView() {
         </Card>
       </Collapse>
 
-      {/* Quick status filter + search card */}
+      {/* Quick status + search */}
       <Card
         sx={(theme) => ({
           mb: 2,
@@ -870,7 +937,7 @@ export default function InventoryView() {
             gap: 2,
           }}
         >
-          {/* Status tabs */}
+          {/* Quick status */}
           <Box
             sx={{
               display: 'flex',
@@ -903,7 +970,20 @@ export default function InventoryView() {
               return (
                 <Box
                   key={item.key}
-                  onClick={() => handleQuickStatusChange(item.key)}
+                  onClick={() => {
+                    setQuickStatus(item.key);
+
+                    let statusVal = '';
+                    if (item.key === 'approved') statusVal = 1;
+                    else if (item.key === 'pending') statusVal = 0;
+                    else if (item.key === 'rejected') statusVal = 2;
+
+                    const nextFilters = { ...filters, status: statusVal };
+                    setFilters(nextFilters);
+                    setCurrentPage(1);
+                    cacheRef.current = {};
+                    fetchInventories(nextFilters, 1, true);
+                  }}
                   sx={(theme) => ({
                     display: 'flex',
                     alignItems: 'center',
@@ -987,6 +1067,7 @@ export default function InventoryView() {
         </Box>
       </Card>
 
+      {/* CONTENT: TABLE / LIST */}
       {isLoading ? (
         <Card>
           <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
@@ -1009,7 +1090,7 @@ export default function InventoryView() {
                   <TableCell>ads.txt</TableCell>
                   <TableCell>Updated</TableCell>
                   <TableCell align="right">Actions</TableCell>
-                  <TableCell>Deleted</TableCell>
+                  {isDeletedRoute && <TableCell>Restore</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1121,27 +1202,37 @@ export default function InventoryView() {
                                 <Iconify icon="solar:pen-bold" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleDelete(row.id)}
-                              >
-                                <Iconify icon="solar:trash-bin-trash-bold" />
-                              </IconButton>
-                            </Tooltip>
+                            {!isDeletedRoute && (
+                              <Tooltip title="Delete">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => handleDelete(row.id)}
+                                >
+                                  <Iconify icon="solar:trash-bin-trash-bold" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                           </Stack>
                         </TableCell>
 
-                        <TableCell>
-                          <DeletedChip value={row.is_deleted} />
-                        </TableCell>
+                        {isDeletedRoute && (
+                          <TableCell>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => setRestoreRow(row)} // 🔵 OPEN CONFIRM DIALOG
+                            >
+                              Restore
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10}>
+                    <TableCell colSpan={isDeletedRoute ? 11 : 10}>
                       <TableNoData notFound />
                     </TableCell>
                   </TableRow>
@@ -1151,6 +1242,7 @@ export default function InventoryView() {
           </TableContainer>
         </Card>
       ) : (
+        // LIST VIEW
         <Card
           sx={{
             background: 'transparent',
@@ -1284,6 +1376,17 @@ export default function InventoryView() {
                               )}
                             </Box>
                           </Stack>
+
+                          {isDeletedRoute && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              sx={{ mt: 1 }}
+                              onClick={() => setRestoreRow(row)} // 🔵 OPEN CONFIRM DIALOG
+                            >
+                              Restore
+                            </Button>
+                          )}
                         </Stack>
                       </Box>
 
@@ -1313,7 +1416,7 @@ export default function InventoryView() {
         </Card>
       )}
 
-      {/* Shared Menu for list card actions */}
+      {/* More actions menu (list view) */}
       <Menu
         anchorEl={menuAnchorEl}
         open={Boolean(menuAnchorEl)}
@@ -1357,20 +1460,23 @@ export default function InventoryView() {
           <ListItemText primary="Edit" />
         </MenuItem>
 
-        <MenuItem
-          onClick={() => {
-            if (menuRow?.id) handleDelete(menuRow.id);
-            closeMenu();
-          }}
-          sx={{ color: 'error.main' }}
-        >
-          <ListItemIcon sx={{ color: 'error.main' }}>
-            <DeleteOutlineIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Delete" />
-        </MenuItem>
+        {!isDeletedRoute && (
+          <MenuItem
+            onClick={() => {
+              if (menuRow?.id) handleDelete(menuRow.id);
+              closeMenu();
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon sx={{ color: 'error.main' }}>
+              <DeleteOutlineIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Delete" />
+          </MenuItem>
+        )}
       </Menu>
 
+      {/* Pagination */}
       <Stack
         spacing={2}
         sx={{
@@ -1389,6 +1495,7 @@ export default function InventoryView() {
         />
       </Stack>
 
+      {/* Add / Edit dialogs */}
       <AddInventoryFormDialog
         open={openAdd}
         onClose={() => setOpenAdd(false)}
@@ -1410,6 +1517,7 @@ export default function InventoryView() {
         }}
       />
 
+      {/* View dialog */}
       <Dialog
         fullWidth
         maxWidth="md"
@@ -1558,6 +1666,9 @@ export default function InventoryView() {
                       <AdsTxtChip value={selected.adsTxtStatus} />
                     </Labeled>
                     <Labeled label="Publisher ID">{selected.publisherId ?? '—'}</Labeled>
+                    <Labeled label="Deleted">
+                      {Number(selected.is_deleted) === 1 ? 'Yes' : 'No'}
+                    </Labeled>
                   </Stack>
                 </Grid>
 
@@ -1601,9 +1712,12 @@ export default function InventoryView() {
         </DialogActions>
       </Dialog>
 
+      {/* Delete confirm dialog */}
       <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
         <DialogTitle>Delete Inventory</DialogTitle>
-        <DialogContent>Are you sure you want to delete this inventory?</DialogContent>
+        <DialogContent>
+          This will move the inventory to the Deleted tab. Are you sure?
+        </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteId(null)} disabled={deleting}>
             Cancel
@@ -1614,6 +1728,23 @@ export default function InventoryView() {
         </DialogActions>
       </Dialog>
 
+      {/* 🔵 Restore confirm dialog */}
+      <Dialog open={!!restoreRow} onClose={() => (!restoring ? setRestoreRow(null) : null)}>
+        <DialogTitle>Restore Inventory</DialogTitle>
+        <DialogContent>
+          Are you sure you want to restore this inventory and move it back to the main list?
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRestoreRow(null)} disabled={restoring}>
+            Cancel
+          </Button>
+          <Button onClick={confirmRestore} variant="contained" disabled={restoring}>
+            {restoring ? 'Restoring...' : 'Restore'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Notes dialog */}
       <InventoryNotesDialog
         open={notesOpen}
         inventory={notesInventory}
