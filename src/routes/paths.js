@@ -64,7 +64,7 @@ export const paths = {
       edit: (id) => `${ROOTS.DASHBOARD}/admin/${id}`,
     },
     logs: {
-      root: `${ROOTS.DASHBOARD}/logs`,
+      root: `${ROOTS.DASHBOARD}/logs_`,
     },
   },
 };
