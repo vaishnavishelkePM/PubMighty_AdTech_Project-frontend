@@ -44,6 +44,7 @@ export const paths = {
       web: `${ROOTS.DASHBOARD}/inventory/web`,
       ott: `${ROOTS.DASHBOARD}/inventory/ott`,
       app: `${ROOTS.DASHBOARD}/inventory/app`,
+      delete: `${ROOTS.DASHBOARD}/inventory/deleted`,
     },
     publisher: {
       root: `${ROOTS.DASHBOARD}/publishers`,

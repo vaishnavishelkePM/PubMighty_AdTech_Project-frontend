@@ -61,6 +61,10 @@ export const navData = [
             title: 'App',
             path: paths.dashboard.inventory.app,
           },
+          {
+            title: 'Deleted',
+            path: paths.dashboard.inventory.delete,
+          },
         ],
       },
     ],
