@@ -223,7 +223,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
       const res = await axios.post(url, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          //    'Content-Type': 'multipart/form-data',
         },
         withCredentials: true,
         validateStatus: () => true,

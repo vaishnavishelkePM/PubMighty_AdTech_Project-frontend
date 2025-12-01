@@ -54,6 +54,7 @@ import { DashboardContent } from 'src/layouts/dashboard';
 
 import { Iconify } from 'src/components/iconify';
 import { TableNoData } from 'src/components/table';
+import { DeletedChip } from 'src/components/chip/deleted-chip';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import PartnerSelector from 'src/components/selectors/inventory/partner-selector';
 import PublisherSelector from 'src/components/selectors/inventory/publisher-selector';
@@ -1008,6 +1009,7 @@ export default function InventoryView() {
                   <TableCell>ads.txt</TableCell>
                   <TableCell>Updated</TableCell>
                   <TableCell align="right">Actions</TableCell>
+                  <TableCell>Deleted</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1129,6 +1131,10 @@ export default function InventoryView() {
                               </IconButton>
                             </Tooltip>
                           </Stack>
+                        </TableCell>
+
+                        <TableCell>
+                          <DeletedChip value={row.is_deleted} />
                         </TableCell>
                       </TableRow>
                     );
