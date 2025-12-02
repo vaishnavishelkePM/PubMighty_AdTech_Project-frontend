@@ -33,9 +33,9 @@ import {
 } from '@mui/material';
 
 import { CONFIG } from 'src/global-config';
-
 import { Iconify } from 'src/components/iconify';
 
+// ---------- Avatar helpers ----------
 const createImage = (url) =>
   new Promise((resolve, reject) => {
     const img = new Image();
@@ -72,6 +72,7 @@ const getCroppedImg = async (imageSrc, cropPixels) => {
   });
 };
 
+// ---------- Constants ----------
 const ROLE_OPTIONS = [
   { label: 'Super Admin', value: 'superAdmin' },
   { label: 'Staff', value: 'staff' },
@@ -79,50 +80,39 @@ const ROLE_OPTIONS = [
   { label: 'Support', value: 'support' },
 ];
 
-const Schema = z
-  .object({
-    username: z.string().trim().min(1, 'Username is required').max(150),
-    email: z
-      .string()
-      .optional()
-      .or(z.literal(''))
-      .refine((val) => !val || /\S+@\S+\.\S+/.test(val), 'Please enter a valid email address'),
-    password: z.string().optional().or(z.literal('')),
-    role: z.string().optional().or(z.literal('')),
-    status: z.number({ invalid_type_error: 'Status is required' }).min(0).max(3),
-    two_fa: z.boolean().default(false),
-    two_fa_method: z.union([z.literal(''), z.enum(['email', 'auth_app'])]).default(''),
-    two_fa_secret: z.string().optional().or(z.literal('')),
-    avatar: z.any().nullable().optional(),
-  })
-  .refine(
-    (v) => {
-      if (!v.two_fa) return true;
-      return !!v.two_fa_method;
-    },
-    { message: 'Select 2FA method', path: ['two_fa_method'] }
-  )
-  .refine(
-    (v) => {
-      if (!v.two_fa) return true;
-      if (v.two_fa_method !== 'auth_app') return true;
-      return !!v.two_fa_secret?.trim();
-    },
-    {
-      message: 'Authenticator secret is required when using Auth App',
-      path: ['two_fa_secret'],
-    }
-  );
+// 2FA options (0 = Off, 1 = App, 2 = Email)
+const TWO_FA = [
+  { label: 'Off', value: 0 },
+  { label: 'App', value: 1 },
+  { label: 'Email', value: 2 },
+];
 
+// ✅ Zod schema with numeric 2FA option
+const Schema = z.object({
+  username: z.string().trim().min(1, 'Username is required').max(150),
+  email: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine((val) => !val || /\S+@\S+\.\S+/.test(val), 'Please enter a valid email address'),
+  password: z.string().optional().or(z.literal('')),
+  role: z.string().optional().or(z.literal('')),
+  status: z.number({ invalid_type_error: 'Status is required' }).min(0).max(3),
+
+  // 2FA single numeric option (0=off,1=app,2=email)
+  two_fa_option: z.number().int().min(0).max(2).default(0),
+
+  avatar: z.any().nullable().optional(),
+});
+
+// Default values
 const defaultValues = {
   username: '',
   email: '',
   password: '',
   role: '',
   status: 1,
-  two_fa: false,
-  two_fa_method: '',
-  two_fa_secret: '',
+  two_fa_option: 0, // 0=Off, 1=App, 2=Email
   avatar: null,
 };
 
@@ -156,11 +146,11 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
   });
 
   const avatarFile = watch('avatar');
-  const twoFAEnabled = watch('two_fa');
-  const twoFAMethod = watch('two_fa_method');
+  const twoFaOption = watch('two_fa_option'); // 0/1/2
 
   const errorText = (path) => errors?.[path]?.message || '';
 
+  // Avatar preview when a local File is selected
   useEffect(() => {
     if (avatarFile instanceof File) {
       const url = URL.createObjectURL(avatarFile);
@@ -169,14 +159,9 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
     }
   }, [avatarFile]);
 
+  // Load admin on open
   useEffect(() => {
     if (!open) return;
-
-    if (!isEdit) {
-      reset(defaultValues);
-      setAvatarPreview(null);
-      return;
-    }
 
     const load = async () => {
       try {
@@ -207,15 +192,22 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
 
         const d = res.data.data || {};
 
+        // ✅ Map backend 2FA to numeric option
+        // Prefer new column `twoFactorEnabled` (0/1/2); fallback to old `two_fa`
+        const rawTwoFA =
+          typeof d.twoFactorEnabled === 'number'
+            ? d.twoFactorEnabled
+            : typeof d.two_fa === 'number'
+            ? d.two_fa
+            : 0;
+
         reset({
           username: d.username || '',
           email: d.email || '',
           password: '',
           role: d.role || '',
           status: typeof d.status === 'number' ? d.status : 1,
-          two_fa: d.two_fa === 1,
-          two_fa_method: d.two_fa_method || '',
-          two_fa_secret: '',
+          two_fa_option: rawTwoFA,
           avatar: null,
         });
 
@@ -232,17 +224,14 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
       }
     };
 
-    if (!open) return;
-
-    // id must be a number
     const numericId = Number(id);
-    if (!numericId || isNaN(numericId)) {
+    if (!numericId || Number.isNaN(numericId)) {
       console.warn('Invalid admin ID:', id);
       return;
     }
 
     load();
-  }, [open, id]);
+  }, [open, id, reset, token]);
 
   const closeDialog = () => {
     reset(defaultValues);
@@ -250,6 +239,7 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
     onClose?.();
   };
 
+  // ---------- Avatar crop handlers ----------
   const handleAvatarPenClick = () => {
     if (!avatarPreview) {
       toast.info('No avatar image to crop');
@@ -326,15 +316,11 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
     }
   };
 
+  // ---------- Submit ----------
   const onSubmit = async (values) => {
     try {
       if (!token) {
         toast.error('Session expired. Please login again.');
-        return;
-      }
-
-      if (!isEdit && !values.password) {
-        toast.error('Password is required for a new admin');
         return;
       }
 
@@ -351,19 +337,9 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
         fd.append('status', String(values.status));
       }
 
-      if (values.two_fa) {
-        fd.append('two_fa', '1');
-
-        if (values.two_fa_method) {
-          fd.append('two_fa_method', values.two_fa_method);
-        }
-
-        if (values.two_fa_method === 'auth_app' && values.two_fa_secret) {
-          fd.append('two_fa_secret', values.two_fa_secret.trim());
-        }
-      } else {
-        fd.append('two_fa', '0');
-      }
+      // ✅ 2FA: send numeric twoFactorEnabled 0/1/2
+      const opt = values.two_fa_option ?? 0;
+      fd.append('twoFactorEnabled', String(opt));
 
       if (values.avatar instanceof File) {
         fd.append('avatar', values.avatar);
@@ -480,6 +456,7 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
           </Box>
         ) : (
           <Grid container spacing={2} sx={{ pt: 1 }}>
+            {/* Avatar + upload */}
             <Grid item xs={12}>
               <input
                 ref={fileInputRef}
@@ -533,6 +510,7 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
               </Stack>
             </Grid>
 
+            {/* Username / Email / Password */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="username"
@@ -583,6 +561,7 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
               />
             </Grid>
 
+            {/* Role / Status / 2FA */}
             <Grid item xs={12} md={4}>
               <FormControl fullWidth error={!!errors.role}>
                 <InputLabel>Role</InputLabel>
@@ -629,32 +608,30 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
               </FormControl>
             </Grid>
 
+            {/* ✅ Single 2FA dropdown: Off / App / Email (0/1/2) */}
             <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!errors.two_fa_option}>
                 <InputLabel>2FA</InputLabel>
-                <Select
-                  label="2FA"
-                  value={twoFAEnabled ? (twoFAMethod === 'auth_app' ? 'auth_app' : 'email') : 'off'}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'off') {
-                      setValue('two_fa', false);
-                      setValue('two_fa_method', '');
-                      setValue('two_fa_secret', '');
-                    } else if (val === 'email') {
-                      setValue('two_fa', true);
-                      setValue('two_fa_method', 'email');
-                      setValue('two_fa_secret', '');
-                    } else if (val === 'auth_app') {
-                      setValue('two_fa', true);
-                      setValue('two_fa_method', 'auth_app');
-                    }
-                  }}
-                >
-                  <MenuItem value="off">Off</MenuItem>
-                  <MenuItem value="email">Email</MenuItem>
-                  <MenuItem value="auth_app">App</MenuItem>
-                </Select>
+                <Controller
+                  name="two_fa_option"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      {...field}
+                      label="2FA"
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    >
+                      {TWO_FA.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.two_fa_option && (
+                  <FormHelperText>{errorText('two_fa_option')}</FormHelperText>
+                )}
               </FormControl>
             </Grid>
           </Grid>
@@ -678,6 +655,7 @@ export default function EditAdminFormDialog({ open, onClose, id, onSuccess }) {
         </Button>
       </DialogActions>
 
+      {/* Crop dialog */}
       <Dialog open={cropDialogOpen} onClose={handleCropCancel} fullWidth maxWidth="sm">
         <DialogTitle>Crop Admin Avatar</DialogTitle>
         <DialogContent

@@ -51,7 +51,6 @@ import EditAdminFormDialog from './child/edit-admin-form-dialog';
 
 export function AdminListView() {
   const router = useRouter();
-
   const compact = true;
 
   const token = getCookie('session_key');
@@ -70,6 +69,8 @@ export function AdminListView() {
 
   const [totalAdmins, setTotalAdmins] = useState(0);
 
+  // twoFA: '' | '0' | '1' | '2'
+  // 0 = Disabled, 1 = App, 2 = Email
   const defaultFilters = {
     username: '',
     email: '',
@@ -98,7 +99,6 @@ export function AdminListView() {
   const fetchAdmins = useCallback(
     async (filter, p = 1, hardReload = false) => {
       try {
-        //const token = getCookie('session_key');
         if (!token) {
           toast.error('Session expired. Please login again.');
           router.replace(paths.login.root);
@@ -108,11 +108,18 @@ export function AdminListView() {
         setLoading(true);
 
         const qp = new URLSearchParams();
+
         Object.entries(filter).forEach(([k, v]) => {
           if (v !== '' && v !== null && v !== undefined) {
-            qp.append(k, v);
+            // 🔹 Map twoFA -> two_fa for backend
+            if (k === 'twoFA') {
+              qp.append('two_fa', v);
+            } else {
+              qp.append(k, v);
+            }
           }
         });
+
         qp.append('page', p);
 
         const queryKey = qp.toString();
@@ -168,12 +175,14 @@ export function AdminListView() {
         setLoading(false);
       }
     },
-    [headers, listUrlBase, router]
+    [headers, listUrlBase, router, token]
   );
 
   useEffect(() => {
     fetchAdmins(defaultFilters, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   const openViewDialog = (row) => {
     setSelected(row);
     setViewOpen(true);
@@ -257,6 +266,7 @@ export function AdminListView() {
         sx={{ mb: 2 }}
       />
 
+      {/* ============= FILTERS ============= */}
       <Collapse in={showFilter} timeout="auto" unmountOnExit>
         <Card sx={{ p: 2, mb: 2 }}>
           <Box
@@ -306,6 +316,7 @@ export function AdminListView() {
               </Select>
             </FormControl>
 
+            {/* 🔹 2FA Filter: Disabled / Email / App */}
             <FormControl fullWidth>
               <InputLabel>2FA</InputLabel>
               <Select
@@ -314,9 +325,9 @@ export function AdminListView() {
                 onChange={(e) => setFilters({ ...filters, twoFA: e.target.value })}
               >
                 <MenuItem value="">All</MenuItem>
-                <MenuItem value={0}>Disabled</MenuItem>
-                <MenuItem value={1}>Enabled</MenuItem>
-                <MenuItem value={2}>Auth App</MenuItem>
+                <MenuItem value="0">Disabled</MenuItem>
+                <MenuItem value="2">Email</MenuItem>
+                <MenuItem value="1">App</MenuItem>
               </Select>
             </FormControl>
 
@@ -352,7 +363,6 @@ export function AdminListView() {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-
                 gap: 1,
               }}
             >
@@ -385,6 +395,7 @@ export function AdminListView() {
         </Card>
       </Collapse>
 
+      {/* Summary card */}
       <Card
         sx={{
           display: 'flex',
@@ -414,7 +425,7 @@ export function AdminListView() {
         </Box>
       </Card>
 
-      {/* ================= TABLE ================= */}
+      {/* ============= TABLE ============= */}
       <Card>
         {loading ? (
           <Box sx={{ p: 6, display: 'flex', justifyContent: 'center' }}>
@@ -508,7 +519,7 @@ export function AdminListView() {
 
                         <TableCell>{r.role || '—'}</TableCell>
 
-                        {/* 2FA */}
+                        {/* 2FA chip: expects 0=Disabled, 1=App, 2=Email */}
                         <TableCell>
                           <TwoFAChip value={r.two_fa ?? r.twoFactorEnabled} />
                         </TableCell>
@@ -570,7 +581,7 @@ export function AdminListView() {
         )}
       </Card>
 
-      {/* ================= PAGINATION ================= */}
+      {/* ============= PAGINATION ============= */}
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
         <Pagination
           count={totalPages}
@@ -581,7 +592,7 @@ export function AdminListView() {
         />
       </Box>
 
-      {/* ================= ADD DIALOG ================= */}
+      {/* ADD DIALOG */}
       <AddAdminFormDialog
         open={openAddForm}
         onClose={() => setOpenAddForm(false)}
@@ -592,7 +603,7 @@ export function AdminListView() {
         }}
       />
 
-      {/* ================= EDIT DIALOG ================= */}
+      {/* EDIT DIALOG */}
       <EditAdminFormDialog
         open={openEditForm}
         id={editId}
@@ -608,7 +619,7 @@ export function AdminListView() {
         }}
       />
 
-      {/* ================= VIEW DIALOG ================= */}
+      {/* VIEW DIALOG */}
       <Dialog
         fullWidth
         maxWidth="sm"
@@ -715,6 +726,7 @@ export function AdminListView() {
         </DialogActions>
       </Dialog>
 
+      {/* IMAGE VIEW DIALOG */}
       <Dialog open={viewImageOpen} onClose={handleCloseImage} maxWidth="sm" fullWidth>
         <DialogTitle>{viewImageTitle}</DialogTitle>
         <DialogContent
@@ -748,6 +760,8 @@ export function AdminListView() {
           <Button onClick={handleCloseImage}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* DELETE CONFIRM */}
       <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
         <DialogTitle>Delete Admin</DialogTitle>
         <DialogContent>Are you sure you want to delete this admin?</DialogContent>

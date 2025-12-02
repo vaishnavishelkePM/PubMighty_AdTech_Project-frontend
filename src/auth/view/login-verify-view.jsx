@@ -77,31 +77,30 @@ export default function LoginVerifyView() {
 
       // backend returns { success: true, msg: "...", data: { token, expiresAt } }
       if (resData.success) {
-        const token = resData.data?.token;
-        const expiresAt = resData.data?.expiresAt;
+  const token = resData.data?.token;
+  const expiresAt = resData.data?.expiresAt;
 
-        // clear the temp cookies we set after first login
-        deleteCookie('login');
-        deleteCookie('action');
-        deleteCookie('password');
+  // clear the temp cookies we set after first login
+  deleteCookie('login');
+  deleteCookie('action');
+  deleteCookie('password');
 
-        // store session
-        if (token && expiresAt) {
-          setSessionCookies(token, expiresAt);
-        }
+  // 🔹 IMPORTANT: set session cookie again so dashboard auth works
+  if (token && expiresAt) {
+    setSessionCookies(token, expiresAt);
+  }
 
-        // we don't actually get user from this API, but keep your logic structure
-        // so app context doesn't break
-        if (resData.data?.user) {
-          localStorage.setItem('user', JSON.stringify(resData.data.user));
-          setUser(resData.data.user);
-        }
+  // 🔹 Optional but correct: backend returns `admin`, not `user`
+  if (resData.data?.admin) {
+    localStorage.setItem('user', JSON.stringify(resData.data.admin));
+    setUser(resData.data.admin);
+  }
 
-        toast.success(resData.msg || 'Login verified');
-        router.push(paths.dashboard.root);
-      } else {
-        toast.error(resData.msg || 'Invalid OTP');
-      }
+  toast.success(resData.msg || 'Login verified');
+  router.push(paths.dashboard.root);
+} else {
+  toast.error(resData.msg || 'Invalid OTP');
+}
     } catch (err) {
       console.error('Error during onSubmit in login verify action:', errors);
       toast.error('Internal Server Error');
