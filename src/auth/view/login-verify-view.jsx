@@ -80,17 +80,14 @@ export default function LoginVerifyView() {
   const token = resData.data?.token;
   const expiresAt = resData.data?.expiresAt;
 
-  // clear the temp cookies we set after first login
   deleteCookie('login');
   deleteCookie('action');
   deleteCookie('password');
 
-  // 🔹 IMPORTANT: set session cookie again so dashboard auth works
   if (token && expiresAt) {
     setSessionCookies(token, expiresAt);
   }
 
-  // 🔹 Optional but correct: backend returns `admin`, not `user`
   if (resData.data?.admin) {
     localStorage.setItem('user', JSON.stringify(resData.data.admin));
     setUser(resData.data.admin);

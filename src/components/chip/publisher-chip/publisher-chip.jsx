@@ -17,9 +17,9 @@ export function StatusChip({ value }) {
 }
 export function TwoFAChip({ value }) {
   const map = {
-    0: { label: 'Disabled', color: 'default' },
-    1: { label: 'Email', color: 'info' },
-    2: { label: 'Auth App', color: 'success' },
+    0: { label: 'off', color: 'default' },
+    1: { label: 'Email', color: 'success' },
+    2: { label: 'App', color: 'success' },
   };
 
   const m = map[Number(value)] ?? map[0];

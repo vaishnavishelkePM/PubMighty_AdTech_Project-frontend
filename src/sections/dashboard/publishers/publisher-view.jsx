@@ -348,7 +348,7 @@ export function PublisherListView() {
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value={0}>Disabled</MenuItem>
                 <MenuItem value={1}>Email</MenuItem>
-                <MenuItem value={2}>Auth App</MenuItem>
+                <MenuItem value={2}>App</MenuItem>
               </Select>
             </FormControl>
 
