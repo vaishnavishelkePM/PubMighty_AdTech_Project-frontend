@@ -131,7 +131,7 @@ function getChangedFieldPreview(beforeData, afterData, side = "before") {
       ? "[object]"
       : String(value);
 
-  return `{ ${keyToShow}: ${display} }`;
+  return ` ${keyToShow}: ${display} `;
 }
 
 
@@ -171,7 +171,7 @@ export function AdminLogsView() {
     }));
   };
 
-  // ✅ NEW: state for dialog
+  
   const [selectedLog, setSelectedLog] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 

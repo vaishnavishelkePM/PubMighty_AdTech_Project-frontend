@@ -31,10 +31,9 @@ import {
 } from '@mui/material';
 
 import { CONFIG } from 'src/global-config';
-
 import { Iconify } from 'src/components/iconify';
 
-// Role options -> must match backend: "superAdmin", "staff", "paymentManager", "support"
+// Role options -> must match backend
 const ROLE_OPTIONS = [
   { label: 'Super Admin', value: 'superAdmin' },
   { label: 'Staff', value: 'staff' },
@@ -42,7 +41,14 @@ const ROLE_OPTIONS = [
   { label: 'Support', value: 'support' },
 ];
 
-// Zod schema aligned with editAdmin
+// 2FA options (same style as Partner)
+const TWO_FA = [
+  { label: 'Off', value: 0 },
+  { label: 'App', value: 1 },
+  { label: 'Email', value: 2 },
+];
+
+// Zod schema aligned with addAdmin + our 2FA dropdown
 const Schema = z
   .object({
     username: z.string().trim().min(1, 'Username is required').max(150),
@@ -53,56 +59,33 @@ const Schema = z
       .or(z.literal(''))
       .refine((val) => !val || /\S+@\S+\.\S+/.test(val), 'Please enter a valid email address'),
 
-    // Optional in schema; we enforce required only on CREATE
     password: z.string().optional().or(z.literal('')),
 
-    role: z.string().optional().or(z.literal('')), // backend allows missing role
+    role: z.string().optional().or(z.literal('')),
 
     status: z.number({ invalid_type_error: 'Status is required' }).min(0).max(3),
 
-    two_fa: z.boolean().default(false),
-    two_fa_method: z.union([z.literal(''), z.enum(['email', 'auth_app'])]).default(''),
-    two_fa_secret: z.string().optional().or(z.literal('')),
+    // single numeric 2FA selection (like partner twoFactorEnabled)
+    two_fa_option: z.number().int().min(0).max(2).default(0),
 
+    two_fa_secret: z.string().optional().or(z.literal('')),
     avatar: z.any().nullable().optional(),
   })
-  // if 2FA enabled → require method
-  .refine(
-    (v) => {
-      if (!v.two_fa) return true;
-      return !!v.two_fa_method;
-    },
-    { message: 'Select 2FA method', path: ['two_fa_method'] }
-  )
-  // if 2FA method = auth_app → require secret
-  .refine(
-    (v) => {
-      if (!v.two_fa) return true;
-      if (v.two_fa_method !== 'auth_app') return true;
-      return !!v.two_fa_secret?.trim();
-    },
-    {
-      message: 'Authenticator secret is required when using Auth App',
-      path: ['two_fa_secret'],
-    }
-  );
 
-// Default values
 const defaultValues = {
   username: '',
   email: '',
   password: '',
   role: '',
-  status: 1, // 0=pending, 1=active, 2=suspended, 3=disabled
-  two_fa: false,
-  two_fa_method: '',
+  status: 1,
+  two_fa_option: 0, // 0=Off, 1=App, 2=Email
   two_fa_secret: '',
   avatar: null,
 };
 
 export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
   const token = getCookie('session_key');
-  const isEdit = false; // fixed for ADD
+  const isEdit = false; // ADD only
 
   const [loading, setLoading] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -112,7 +95,6 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
     handleSubmit,
     reset,
     watch,
-    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(Schema),
@@ -121,9 +103,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
   });
 
   const avatarFile = watch('avatar');
-  const twoFAEnabled = watch('two_fa');
-  const twoFAMethod = watch('two_fa_method');
-  const statusWatch = watch('status');
+  const twoFaOption = watch('two_fa_option'); // 0/1/2
 
   const errorText = (path) => errors?.[path]?.message || '';
 
@@ -133,8 +113,6 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
       setAvatarPreview(url);
       return () => URL.revokeObjectURL(url);
     }
-
-    // If avatar cleared, also clear preview
     if (!avatarFile) {
       setAvatarPreview(null);
     }
@@ -142,16 +120,9 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
 
   useEffect(() => {
     if (!open) return;
-
-    // Add mode → reset fresh every time (original logic branch for !isEdit)
-    if (!isEdit) {
-      reset(defaultValues);
-      setAvatarPreview(null);
-      return;
-    }
-
-    // (Fetch logic kept but never reached because isEdit === false)
-  }, [open, isEdit, reset]);
+    reset(defaultValues);
+    setAvatarPreview(null);
+  }, [open, reset]);
 
   const closeDialog = () => {
     reset(defaultValues);
@@ -166,7 +137,6 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
         return;
       }
 
-      // Enforce password on CREATE only (here always CREATE)
       if (!isEdit && !values.password) {
         toast.error('Password is required for a new admin');
         return;
@@ -178,10 +148,14 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
 
       // username & email
       fd.append('username', values.username.trim());
-      if (values.email) fd.append('email', values.email.trim().toLowerCase());
+      if (values.email) {
+        fd.append('email', values.email.trim().toLowerCase());
+      }
 
-      // password only if provided (backend removes if empty)
-      if (values.password) fd.append('password', values.password);
+      // password
+      if (values.password) {
+        fd.append('password', values.password);
+      }
 
       // role
       if (values.role) {
@@ -193,37 +167,21 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
         fd.append('status', String(values.status));
       }
 
-      // 2FA mapping for backend: two_fa (0/1), two_fa_method, two_fa_secret
-      if (values.two_fa) {
-        fd.append('two_fa', '1');
+      // 2FA → backend now expects twoFactorEnabled (0/1/2)
+      const opt = values.two_fa_option ?? 0;
+      fd.append('twoFactorEnabled', String(opt));
 
-        if (values.two_fa_method) {
-          fd.append('two_fa_method', values.two_fa_method);
-        }
-
-        if (values.two_fa_method === 'auth_app' && values.two_fa_secret) {
-          fd.append('two_fa_secret', values.two_fa_secret.trim());
-        }
-      } else {
-        // disable 2FA
-        fd.append('two_fa', '0');
-        // do NOT send method/secret so Joi doesn't complain
-      }
-
-      // avatar file (multer -> req.file)
+      // avatar
       if (values.avatar instanceof File) {
         fd.append('avatar', values.avatar);
       }
 
-      const url = isEdit
-        ? `${CONFIG.apiUrl}/v1/admin/admins/0` // never used when isEdit=false
-        : `${CONFIG.apiUrl}/v1/admin/admins/add`;
+      const url = `${CONFIG.apiUrl}/v1/admin/admins/add`;
 
-      // Backend uses POST for add
       const res = await axios.post(url, fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          //    'Content-Type': 'multipart/form-data',
+          // Let browser set multipart boundary
         },
         withCredentials: true,
         validateStatus: () => true,
@@ -249,7 +207,6 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
     }
   };
 
-  // ADD FORM UI (same as combined)
   return (
     <Dialog
       open={open}
@@ -291,10 +248,8 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
         </Box>
 
         <Box>
-          <Box sx={{ fontSize: 15, fontWeight: 600 }}>{isEdit ? 'Edit Admin' : 'Add Admin'}</Box>
-          <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-            {isEdit ? 'Update existing admin details' : 'Create a new admin user'}
-          </Box>
+          <Box sx={{ fontSize: 15, fontWeight: 600 }}>Add Admin</Box>
+          <Box sx={{ fontSize: 12, color: 'text.secondary' }}>Create a new admin user</Box>
         </Box>
 
         <Box sx={{ flexGrow: 1 }} />
@@ -328,8 +283,8 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
           </Box>
         ) : (
           <Grid container spacing={2} sx={{ pt: 1 }}>
-            {/* Avatar row */}
-            <Grid item xs={20}>
+            {/* Avatar */}
+            <Grid item xs={12}>
               <Stack direction="row" spacing={2} alignItems="center">
                 <Avatar src={avatarPreview || undefined} sx={{ width: 86, height: 86 }}>
                   {!avatarPreview && (watch('username')?.[0]?.toUpperCase() || 'A')}
@@ -361,7 +316,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
               </Stack>
             </Grid>
 
-            {/* First row: Username / Email / Password */}
+            {/* Username / Email / Password */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="username"
@@ -404,7 +359,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
                     {...field}
                     fullWidth
                     type="password"
-                    label={isEdit ? 'Password (leave blank to keep same)' : 'Password *'}
+                    label="Password *"
                     error={!!errors.password}
                     helperText={errorText('password')}
                   />
@@ -412,7 +367,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
               />
             </Grid>
 
-            {/* Second row: Role / Status / 2FA select (single) */}
+            {/* Role / Status / 2FA */}
             <Grid item xs={12} md={4}>
               <FormControl fullWidth error={!!errors.role}>
                 <InputLabel>Role</InputLabel>
@@ -448,10 +403,10 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
                       label="Status"
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     >
-                      <MenuItem value={0}>Pending </MenuItem>
-                      <MenuItem value={1}>Active </MenuItem>
-                      <MenuItem value={2}>Suspended </MenuItem>
-                      <MenuItem value={3}>Disabled </MenuItem>
+                      <MenuItem value={0}>Pending</MenuItem>
+                      <MenuItem value={1}>Active</MenuItem>
+                      <MenuItem value={2}>Suspended</MenuItem>
+                      <MenuItem value={3}>Disabled</MenuItem>
                     </Select>
                   )}
                 />
@@ -460,29 +415,24 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
             </Grid>
 
             <Grid item xs={12} md={4}>
-              {/* Single 2FA dropdown like Partner/Publisher */}
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!errors.two_fa_option}>
                 <InputLabel>2FA</InputLabel>
-                <Select
-                  label="2FA"
-                  value={twoFAEnabled ? (twoFAMethod === 'auth_app' ? 'auth_app' : 'email') : 'off'}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'off') {
-                      setValue('two_fa', false);
-                      setValue('two_fa_method', '');
-                      setValue('two_fa_secret', '');
-                    } else if (val === 'email') {
-                      setValue('two_fa', true);
-                      setValue('two_fa_method', 'email');
-                      setValue('two_fa_secret', '');
-                    }
-                  }}
-                >
-                  <MenuItem value="off">Off</MenuItem>
-                  <MenuItem value="email">Email </MenuItem>
-                  <MenuItem value="auth_app">App </MenuItem>
-                </Select>
+                <Controller
+                  name="two_fa_option"
+                  control={control}
+                  render={({ field }) => (
+                    <Select {...field} label="2FA">
+                      {TWO_FA.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                {errors.two_fa_option && (
+                  <FormHelperText>{errorText('two_fa_option')}</FormHelperText>
+                )}
               </FormControl>
             </Grid>
           </Grid>
@@ -502,7 +452,7 @@ export default function AddAdminFormDialog({ open, onClose, onSuccess }) {
           Cancel
         </Button>
         <Button variant="contained" onClick={handleSubmit(onSubmit)} disabled={loading}>
-          {loading ? 'Saving…' : isEdit ? 'Update' : 'Create'}
+          {loading ? 'Saving…' : 'Create'}
         </Button>
       </DialogActions>
     </Dialog>

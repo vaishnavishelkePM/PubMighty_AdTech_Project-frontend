@@ -16,24 +16,25 @@ export function StatusChip({ value }) {
   return <Chip size="small" variant="outlined" label={m.label} color={m.color} />;
 }
 
-// supports boolean or numeric (0/1/2)
+// 0=off, 1=app, 2=email (matches Partner/Admin models: twoFactorEnabled)
 export function TwoFAChip({ value }) {
   const num = Number(value);
 
   if (!Number.isNaN(num)) {
     const map = {
-      0: { label: 'Disabled', color: 'default' },
-      1: { label: 'Enabled', color: 'primary' },
-      2: { label: 'Auth App', color: 'success' },
+      0: { label: 'Off', color: 'default' },
+      1: { label: 'App', color: 'success' },
+      2: { label: 'Email', color: 'primary' },
     };
-    const m = map[num] ?? map[0];
 
+    const m = map[num] ?? map[0];
     return <Chip size="small" variant="outlined" label={m.label} color={m.color} />;
   }
 
+  // Fallback for weird/legacy values
   if (value) {
     return <Chip size="small" variant="outlined" label="Enabled" color="primary" />;
   }
 
-  return <Chip size="small" variant="outlined" label="Disabled" color="default" />;
+  return <Chip size="small" variant="outlined" label="Off" color="default" />;
 }

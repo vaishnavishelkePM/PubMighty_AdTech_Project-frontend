@@ -1343,7 +1343,7 @@ export default function InventoryView() {
                               alt={publisherName}
                               src={
                                 row.publisher?.avatar
-                                  ? `${CONFIG.assetsUrl}/upload/publisher/${row.publisher.avatar}`
+                                  ? `${CONFIG.assetsUrl}/upload/publishers/${ row.publisher?.avatar}`
                                   : undefined
                               }
                               sx={{

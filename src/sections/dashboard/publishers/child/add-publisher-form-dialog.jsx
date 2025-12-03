@@ -40,7 +40,7 @@ const STATUS = [
 const TWO_FA = [
   { label: 'Off', value: 0 },
   { label: 'Email', value: 1 },
-  { label: 'Auth App', value: 2 },
+  { label: 'App', value: 2 },
 ];
 
 const GENDERS = [
