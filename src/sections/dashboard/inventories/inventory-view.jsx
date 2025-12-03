@@ -2148,3 +2148,4 @@ export default function InventoryView() {
     </DashboardContent>
   );
 }
+//this is  complete code 
