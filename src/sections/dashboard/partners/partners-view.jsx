@@ -3,11 +3,11 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { getCookie } from 'minimal-shared';
+import { usePathname } from 'next/navigation';
 import { useRef, useMemo, useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import {
-  Grid,
   Card,
   Chip,
   Stack,
@@ -31,6 +31,10 @@ import {
   ListItemText,
   PaginationItem,
   TableContainer,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 
 import { fDate, fTime } from 'src/utils/format-time';
@@ -53,7 +57,6 @@ import PartnerViewDialog from './child/dialogs/partnerView-dialog';
 import EditPartnerFormDialog from './child/edit-partner-form-dialog';
 import PartnerNotesDialog from './child/dialogs/partner-notes-dialog';
 import PartnerAvatarPreviewDialog from './child/dialogs/partner-avatar-view-dialog';
-import DeletePartnerConfirmDialog from './child/dialogs/delete-partner-confirm-dialog';
 
 // ----------------------------------------------------------------------
 
@@ -68,7 +71,7 @@ const STATUS_OPTIONS = [
 const TWO_FA_OPTIONS = [
   { label: 'Any', value: '' },
   { label: 'Off ', value: 0 },
-  { label: 'App ', value: 1 },
+  { label: 'Auth App ', value: 1 },
   { label: 'Email ', value: 2 },
 ];
 
@@ -97,12 +100,17 @@ function buildQuery(filters = {}) {
   if (filters.status !== '' && filters.status !== null && typeof filters.status !== 'undefined') {
     qs.append('status', String(filters.status));
   }
+
   if (
     filters.twoFactorEnabled !== '' &&
     filters.twoFactorEnabled !== null &&
     typeof filters.twoFactorEnabled !== 'undefined'
   ) {
     qs.append('twoFactorEnabled', String(filters.twoFactorEnabled));
+  }
+
+  if (typeof filters.is_deleted !== 'undefined' && filters.is_deleted !== '') {
+    qs.append('is_deleted', String(filters.is_deleted));
   }
 
   if (filters.sortBy) {
@@ -119,8 +127,12 @@ function buildQuery(filters = {}) {
 
 export default function PartnersView() {
   const token = getCookie('session_key');
+  const pathname = usePathname();
 
-  const defaultFilters = {
+  // Detect /deleted view
+  const isDeletedView = pathname?.includes('/deleted') || false;
+
+  const baseDefaultFilters = {
     partnerId: '',
     username: '',
     email: '',
@@ -131,7 +143,11 @@ export default function PartnersView() {
     sortDir: 'desc',
   };
 
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState({
+    ...baseDefaultFilters,
+    is_deleted: isDeletedView ? 1 : 0,
+  });
+
   const [showFilter, setShowFilter] = useState(false);
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -155,10 +171,9 @@ export default function PartnersView() {
   const [viewOpen, setViewOpen] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // Delete confirm dialog
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // Delete / Restore confirm (same pattern as PublisherListView)
   const [deleteId, setDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Add/Edit dialogs
   const [addOpen, setAddOpen] = useState(false);
@@ -242,14 +257,27 @@ export default function PartnersView() {
     }
   }
 
+  // When route (/all vs /deleted) changes → reset filters & page & cache,
+  // then fetch with correct is_deleted
   useEffect(() => {
-    fetchPartners(1, true);
+    const newFilters = {
+      ...baseDefaultFilters,
+      is_deleted: isDeletedView ? 1 : 0,
+    };
+    setFilters(newFilters);
+    setCurrentPage(1);
+    cacheRef.current = {};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isDeletedView]);
+
+  // Fetch when filters or currentPage changes
+  useEffect(() => {
+    fetchPartners(currentPage, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, currentPage]);
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
-    fetchPartners(page);
   };
 
   const handleFilterApply = () => {
@@ -259,7 +287,11 @@ export default function PartnersView() {
   };
 
   const handleFilterReset = () => {
-    setFilters(defaultFilters);
+    const resetFilters = {
+      ...baseDefaultFilters,
+      is_deleted: isDeletedView ? 1 : 0,
+    };
+    setFilters(resetFilters);
     setCurrentPage(1);
     cacheRef.current = {};
     fetchPartners(1, true);
@@ -300,35 +332,45 @@ export default function PartnersView() {
     setEditOpen(true);
   };
 
-  // ---------------- Delete dialog ----------------
+  // ---------------- Delete / Restore confirm (same UX as Publisher) ----------------
 
-  const askDelete = (id) => {
-    setDeleteId(id);
-    setConfirmOpen(true);
-  };
-
-  const doDelete = async () => {
+  const confirmDeleteOrRestore = async () => {
     if (!deleteId) return;
+
     try {
       setDeleting(true);
 
+      // Toggle is_deleted like before:
+      // - In active view (/all)      → is_deleted = 1 (move to deleted)
+      // - In deleted view (/deleted) → is_deleted = 0 (restore)
+      const payload = {
+        is_deleted: isDeletedView ? 0 : 1,
+      };
+
       const url = `${CONFIG.apiUrl}/v1/admin/partners/${deleteId}`;
-      const resp = await axios.post(url, {}, { headers, validateStatus: () => true });
+      const resp = await axios.put(url, payload, {
+        headers,
+        validateStatus: () => true,
+      });
+
       setDebug(url, resp.status, resp.data);
 
       const data = resp.data;
       if (data?.success) {
-        toast.success(data?.msg || 'Partner deleted');
-        setConfirmOpen(false);
+        toast.success(
+          data?.msg ||
+            (isDeletedView ? 'Partner restored successfully' : 'Partner moved to deleted list')
+        );
+
         setDeleteId(null);
         cacheRef.current = {};
         fetchPartners(currentPage, true);
       } else {
-        toast.error(data?.msg || 'Delete failed');
+        toast.error(data?.msg || (isDeletedView ? 'Restore failed' : 'Delete failed'));
       }
     } catch (e) {
-      console.error('delete error:', e);
-      toast.error('Delete failed');
+      console.error('delete/restore error:', e);
+      toast.error(isDeletedView ? 'Restore failed' : 'Delete failed');
     } finally {
       setDeleting(false);
     }
@@ -425,7 +467,7 @@ export default function PartnersView() {
       {/* Header + actions */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <CustomBreadcrumbs
-          heading="Partners"
+          heading={isDeletedView ? 'Partners (Deleted)' : 'Partners'}
           links={[{ name: 'Dashboard', href: '/' }, { name: 'Partners' }]}
           sx={{ mb: 2 }}
         />
@@ -434,10 +476,14 @@ export default function PartnersView() {
             <Iconify icon="stash:filter" sx={{ width: 20, mr: 1 }} />
             {showFilter ? 'Hide Filter' : 'Show Filter'}
           </Button>
-          <Button variant="contained" onClick={openCreate}>
-            <Iconify icon="material-symbols:add" sx={{ width: 20, mr: 1 }} />
-            Add
-          </Button>
+
+          {/* In deleted view we usually don't allow creating new items */}
+          {!isDeletedView && (
+            <Button variant="contained" onClick={openCreate}>
+              <Iconify icon="material-symbols:add" sx={{ width: 20, mr: 1 }} />
+              Add
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -471,7 +517,7 @@ export default function PartnersView() {
             />
 
             <PartnerByPublisherSelector
-              label="Partner"
+              label="Publisher"
               placeholder="Type publisher ID or username…"
               valueId={filters.partnerId ? Number(filters.partnerId) : undefined}
               onPartnerSelect={(partnerId) => {
@@ -602,7 +648,9 @@ export default function PartnersView() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Typography sx={{ fontSize: 14 }}>Total Partners</Typography>
+          <Typography sx={{ fontSize: 14 }}>
+            {isDeletedView ? 'Total Deleted Partners' : 'Total Partners'}
+          </Typography>
           <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{pagination?.total ?? 0}</Typography>
         </Box>
         <Box
@@ -612,7 +660,7 @@ export default function PartnersView() {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '50%',
-            bgcolor: '#00A76F',
+            bgcolor: isDeletedView ? '#FF5630' : '#00A76F',
             color: '#fff',
           }}
         >
@@ -623,7 +671,7 @@ export default function PartnersView() {
       {/* Table */}
       <Card>
         {isLoading ? (
-          <TableSkeleton cols={14} />
+          <TableSkeleton cols={isDeletedView ? 15 : 14} />
         ) : (
           <TableContainer>
             <Table>
@@ -640,7 +688,10 @@ export default function PartnersView() {
                   <TableCell>Registered IP</TableCell>
                   <TableCell>Last Active</TableCell>
                   <TableCell>Registered</TableCell>
+
                   <TableCell align="right">Actions</TableCell>
+                  {/* EXTRA RESTORE COLUMN ONLY IN /deleted */}
+                  {isDeletedView && <TableCell>Restore</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -760,18 +811,43 @@ export default function PartnersView() {
                             <Iconify icon="solar:eye-bold" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => openEdit(row.id)}>
-                            <Iconify icon="solar:pen-bold" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton size="small" color="error" onClick={() => askDelete(row.id)}>
-                            <Iconify icon="solar:trash-bin-trash-bold" />
-                          </IconButton>
-                        </Tooltip>
+
+                        {/* Edit only in active (/all) view */}
+                        {!isDeletedView && (
+                          <Tooltip title="Edit">
+                            <IconButton size="small" onClick={() => openEdit(row.id)}>
+                              <Iconify icon="solar:pen-bold" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+
+                        {/* DELETE button in /all */}
+                        {!isDeletedView && (
+                          <Tooltip title="Delete">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => setDeleteId(row.id)}
+                            >
+                              <Iconify icon="solar:trash-bin-trash-bold" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Stack>
                     </TableCell>
+
+                    {isDeletedView && (
+                      <TableCell>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          onClick={() => setDeleteId(row.id)}
+                        >
+                          Restore
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 <TableNoData notFound={(pagination?.total ?? 0) === 0} />
@@ -807,7 +883,7 @@ export default function PartnersView() {
         onClose={closeView}
         onEdit={(id) => {
           closeView();
-          if (id) openEdit(id);
+          if (id && !isDeletedView) openEdit(id);
         }}
         fileInputRef={fileInputRef}
         onChangeFile={handleChangeFile}
@@ -830,13 +906,34 @@ export default function PartnersView() {
         onClose={closeNotesDialog}
       />
 
-      {/* Delete partner confirm dialog */}
-      <DeletePartnerConfirmDialog
-        open={confirmOpen}
-        deleting={deleting}
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={doDelete}
-      />
+      {/* DELETE / RESTORE CONFIRM (same style as Publisher) */}
+      <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
+        <DialogTitle>{isDeletedView ? 'Restore Partner' : 'Delete Partner'}</DialogTitle>
+        <DialogContent>
+          {isDeletedView
+            ? 'Are you sure you want to restore this partner?'
+            : 'Are you sure you want to move this partner to deleted list?'}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteId(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            color={isDeletedView ? 'success' : 'error'}
+            variant="contained"
+            onClick={confirmDeleteOrRestore}
+            disabled={deleting}
+          >
+            {deleting
+              ? isDeletedView
+                ? 'Restoring…'
+                : 'Deleting…'
+              : isDeletedView
+                ? 'Restore'
+                : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Add Partner dialog */}
       <AddPartnerFormDialog

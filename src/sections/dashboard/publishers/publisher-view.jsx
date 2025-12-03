@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useRef, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -56,13 +56,18 @@ import PublisherNotesDialog from 'src/sections/dashboard/publishers/child/dialog
 
 export function PublisherListView() {
   const router = useRouter();
+  const pathname = usePathname();
   const token = getCookie('session_key');
+
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
 
-  const defaultFilters = {
+  // Are we on /publishers/deleted ?
+  const isDeletedView = pathname?.includes('/deleted') || false;
+
+  const baseDefaultFilters = {
     id: '',
     username: '',
     email: '',
@@ -73,13 +78,19 @@ export function PublisherListView() {
     sortDir: 'desc',
   };
 
+  // state
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalPublishers, setTotalPublishers] = useState(0);
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState({
+    ...baseDefaultFilters,
+    is_deleted: isDeletedView ? 1 : 0,
+  });
+
   const cacheRef = useRef({});
+
   const [showFilter, setShowFilter] = useState(false);
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
@@ -94,11 +105,6 @@ export function PublisherListView() {
   const [notesPublisher, setNotesPublisher] = useState(null);
 
   const listUrlApi = `${CONFIG.apiUrl}/v1/admin/publishers`;
-
-  useEffect(() => {
-    fetchPublishers(defaultFilters, 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const fetchPublishers = useCallback(
     async (filter, p = 1, hardReload = false) => {
@@ -177,6 +183,39 @@ export function PublisherListView() {
     [headers, listUrlApi, router]
   );
 
+  // When mounting or when route changes between /all and /deleted
+  useEffect(() => {
+    const initialFilters = {
+      ...baseDefaultFilters,
+      is_deleted: isDeletedView ? 1 : 0,
+    };
+
+    setFilters(initialFilters);
+    setPage(1);
+    cacheRef.current = {};
+    fetchPublishers(initialFilters, 1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDeletedView]);
+
+  const handleResetFilters = () => {
+    const initialFilters = {
+      ...baseDefaultFilters,
+      is_deleted: isDeletedView ? 1 : 0,
+    };
+    setFilters(initialFilters);
+    cacheRef.current = {};
+    fetchPublishers(initialFilters, 1, true);
+  };
+
+  const handleApplyFilters = () => {
+    cacheRef.current = {};
+    fetchPublishers(filters, 1, true);
+  };
+
+  const handlePageChange = (_, p) => {
+    fetchPublishers(filters, p);
+  };
+
   const openViewDialog = (row) => {
     setSelected(row);
     setViewOpen(true);
@@ -187,36 +226,62 @@ export function PublisherListView() {
     setNotesOpen(true);
   };
 
-  const confirmDelete = async () => {
+  // Delete on /all  | Restore on /deleted
+  const confirmDeleteOrRestore = async () => {
     try {
       if (!deleteId) return;
       setDeleting(true);
 
-      const result = await axios.delete(`${listUrlApi}/${deleteId}`, {
-        headers,
-        withCredentials: true,
-        validateStatus: () => true,
-      });
+      if (!isDeletedView) {
+        // /publishers/all → soft delete (DELETE)
+        const result = await axios.delete(`${listUrlApi}/${deleteId}`, {
+          headers,
+          withCredentials: true,
+          validateStatus: () => true,
+        });
 
-      if (result.status === 401) {
-        toast.error(result?.data?.msg || 'Unauthorized. Please login again.');
-        router.replace(paths.login.root);
-        return;
-      }
+        if (result.status === 401) {
+          toast.error(result?.data?.msg || 'Unauthorized. Please login again.');
+          router.replace(paths.login.root);
+          return;
+        }
 
-      if (result.data?.success) {
-        toast.success(result.data?.msg || 'Publisher deleted');
-        setDeleteId(null);
-        fetchPublishers(filters, page, true);
+        if (result.data?.success) {
+          toast.success(result.data?.msg || 'Publisher deleted');
+          setDeleteId(null);
+          cacheRef.current = {};
+          fetchPublishers(filters, page, true);
+        } else {
+          toast.error(result.data?.msg || 'Failed to delete publisher');
+        }
       } else {
-        toast.error(result.data?.msg || 'Failed to delete publisher');
+        // /publishers/deleted → restore (POST with is_deleted: 0)
+        const payload = { is_deleted: 0 };
+
+        const result = await axios.post(`${listUrlApi}/${deleteId}`, payload, {
+          headers,
+          withCredentials: true,
+          validateStatus: () => true,
+        });
+
+        if (result.status === 401) {
+          toast.error(result?.data?.msg || 'Unauthorized. Please login again.');
+          router.replace(paths.login.root);
+          return;
+        }
+
+        if (result.data?.success) {
+          toast.success(result.data?.msg || 'Publisher restored successfully');
+          setDeleteId(null);
+          cacheRef.current = {};
+          fetchPublishers(filters, page, true);
+        } else {
+          toast.error(result.data?.msg || 'Failed to restore publisher');
+        }
       }
     } catch (e) {
-      console.error(
-        'error occured during deleting the user from the list in confirmDelete function:',
-        e
-      );
-      toast.error('Error deleting publisher');
+      console.error('error in delete/restore publisher:', e);
+      toast.error(isDeletedView ? 'Error restoring publisher' : 'Error deleting publisher');
     } finally {
       setDeleting(false);
     }
@@ -225,7 +290,7 @@ export function PublisherListView() {
   return (
     <DashboardContent maxWidth="xl">
       <CustomBreadcrumbs
-        heading="Publishers"
+        heading={isDeletedView ? 'Publishers (Deleted)' : 'Publishers'}
         links={[
           { name: 'Home', href: paths.root },
           { name: 'Dashboard', href: paths.dashboard.root },
@@ -238,23 +303,26 @@ export function PublisherListView() {
               {showFilter ? 'Hide Filter' : 'Show Filter'}
             </Button>
 
-            <Button
-              variant="contained"
-              onClick={() => {
-                setEditId(null);
-                setOpenAdd(true);
-              }}
-            >
-              <Iconify icon="material-symbols:add" sx={{ width: 20, mr: 1 }} />
-              Add
-            </Button>
+            {/* Don't allow adding in deleted view */}
+            {!isDeletedView && (
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setEditId(null);
+                  setOpenAdd(true);
+                }}
+              >
+                <Iconify icon="material-symbols:add" sx={{ width: 20, mr: 1 }} />
+                Add
+              </Button>
+            )}
           </Box>
         }
         sx={{ mb: 2 }}
       />
 
       {/* FILTERS */}
-     <Collapse in={showFilter} timeout="auto" unmountOnExit>
+      <Collapse in={showFilter} timeout="auto" unmountOnExit>
         <Card sx={{ p: 2, mb: 2 }}>
           <Box
             sx={{
@@ -282,7 +350,7 @@ export function PublisherListView() {
             />
 
             <PublisherByPartnerSelector
-              label="Publisher "
+              label="Partner "
               placeholder="Type partner ID or username…"
               valueId={filters.id ? Number(filters.id) : undefined}
               onPublisherSelect={(publisherId) => {
@@ -378,6 +446,7 @@ export function PublisherListView() {
                 <MenuItem value="desc">Descending</MenuItem>
               </Select>
             </FormControl>
+
             <Box
               sx={{
                 display: 'flex',
@@ -385,28 +454,11 @@ export function PublisherListView() {
                 gap: 1,
               }}
             >
-              <Button
-                fullWidth
-                size="medium"
-                variant="outlined"
-                onClick={() => {
-                  setFilters(defaultFilters);
-                  cacheRef.current = {};
-                  fetchPublishers(defaultFilters, 1, true);
-                }}
-              >
+              <Button fullWidth size="medium" variant="outlined" onClick={handleResetFilters}>
                 Reset
               </Button>
 
-              <Button
-                fullWidth
-                size="medium"
-                variant="contained"
-                onClick={() => {
-                  cacheRef.current = {};
-                  fetchPublishers(filters, 1, true);
-                }}
-              >
+              <Button fullWidth size="medium" variant="contained" onClick={handleApplyFilters}>
                 Apply
               </Button>
             </Box>
@@ -426,7 +478,9 @@ export function PublisherListView() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Typography sx={{ fontSize: 14 }}>Total Publishers</Typography>
+          <Typography sx={{ fontSize: 14 }}>
+            {isDeletedView ? 'Total Deleted Publishers' : 'Total Publishers'}
+          </Typography>
           <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{totalPublishers}</Typography>
         </Box>
         <Box
@@ -436,7 +490,7 @@ export function PublisherListView() {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '50%',
-            bgcolor: '#3a86aeff',
+            bgcolor: isDeletedView ? '#FF5630' : '#3a86aeff',
             color: '#fff',
           }}
         >
@@ -465,6 +519,9 @@ export function PublisherListView() {
                   <TableCell>Status</TableCell>
                   <TableCell>Last Active</TableCell>
                   <TableCell>Updated</TableCell>
+
+                  {isDeletedView && <TableCell>Restore</TableCell>}
+
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -549,34 +606,52 @@ export function PublisherListView() {
                             </IconButton>
                           </Tooltip>
 
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setEditId(r.id);
-                                setOpenEdit(true);
-                              }}
-                            >
-                              <Iconify icon="mdi:pencil" />
-                            </IconButton>
-                          </Tooltip>
+                          {/* Edit + Delete only on /all (non-deleted) */}
+                          {!isDeletedView && (
+                            <>
+                              <Tooltip title="Edit">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    setEditId(r.id);
+                                    setOpenEdit(true);
+                                  }}
+                                >
+                                  <Iconify icon="mdi:pencil" />
+                                </IconButton>
+                              </Tooltip>
 
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => setDeleteId(r.id)}
-                            >
-                              <Iconify icon="mdi:delete-outline" />
-                            </IconButton>
-                          </Tooltip>
+                              <Tooltip title="Delete">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => setDeleteId(r.id)}
+                                >
+                                  <Iconify icon="solar:trash-bin-trash-bold" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
                         </Stack>
                       </TableCell>
+                      {/* Restore column only on deleted view */}
+                      {isDeletedView && (
+                        <TableCell>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            onClick={() => setDeleteId(r.id)}
+                          >
+                            Restore
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={isDeletedView ? 12 : 11} align="center" sx={{ py: 4 }}>
                       No publishers found.
                     </TableCell>
                   </TableRow>
@@ -589,11 +664,7 @@ export function PublisherListView() {
 
       {/* PAGINATION */}
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
-        <Pagination
-          count={totalPages}
-          page={page}
-          onChange={(_, p) => fetchPublishers(filters, p)}
-        />
+        <Pagination count={totalPages} page={page} onChange={handlePageChange} />
       </Box>
 
       {/* ADD / EDIT DIALOGS */}
@@ -602,6 +673,7 @@ export function PublisherListView() {
         onClose={() => setOpenAdd(false)}
         onSuccess={() => {
           setOpenAdd(false);
+          cacheRef.current = {};
           fetchPublishers(filters, page, true);
         }}
       />
@@ -612,6 +684,7 @@ export function PublisherListView() {
         onClose={() => setOpenEdit(false)}
         onSuccess={() => {
           setOpenEdit(false);
+          cacheRef.current = {};
           fetchPublishers(filters, page, true);
         }}
       />
@@ -724,16 +797,31 @@ export function PublisherListView() {
         </DialogActions>
       </Dialog>
 
-      {/* DELETE CONFIRM */}
+      {/* DELETE / RESTORE CONFIRM */}
       <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
-        <DialogTitle>Delete Publisher</DialogTitle>
-        <DialogContent>Are you sure you want to delete this publisher?</DialogContent>
+        <DialogTitle>{isDeletedView ? 'Restore Publisher' : 'Delete Publisher'}</DialogTitle>
+        <DialogContent>
+          {isDeletedView
+            ? 'Are you sure you want to restore this publisher?'
+            : 'Are you sure you want to move this publisher to deleted list?'}
+        </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteId(null)} disabled={deleting}>
             Cancel
           </Button>
-          <Button color="error" variant="contained" onClick={confirmDelete} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
+          <Button
+            color={isDeletedView ? 'success' : 'error'}
+            variant="contained"
+            onClick={confirmDeleteOrRestore}
+            disabled={deleting}
+          >
+            {deleting
+              ? isDeletedView
+                ? 'Restoring…'
+                : 'Deleting…'
+              : isDeletedView
+                ? 'Restore'
+                : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -11,11 +11,10 @@ const icon = (name) => <SvgColor src={`${CONFIG.assetsDir}/assets/icons/navbar/$
 
 const ICONS = {
   dashboard: icon('ic-dashboard'),
-  partner: icon('ic-jobs'),
-  publisher: icon('ic-folder'),
+  partner: icon('ic-user'),
+  publisher: icon('ic-user'),
   admin: icon('ic-user'),
   inventory: icon('ic-inventory'),
-   admin_log:icon('ic-admin-log'),
 };
 
 // ----------------------------------------------------------------------
@@ -47,7 +46,7 @@ export const navData = [
         icon: ICONS.inventory,
         children: [
           {
-            title: 'All',
+            title: 'Active',
             path: paths.dashboard.inventory.all,
           },
           {
@@ -81,11 +80,31 @@ export const navData = [
         title: ' Partners',
         path: paths.dashboard.partners.root,
         icon: ICONS.partner,
+        children: [
+          {
+            title: 'Active',
+            path: paths.dashboard.partners.all,
+          },
+          {
+            title: 'Deleted',
+            path: paths.dashboard.partners.delete,
+          },
+        ],
       },
       {
         title: 'Publishers',
         path: paths.dashboard.publisher.root,
         icon: ICONS.publisher,
+        children: [
+          {
+            title: 'Active',
+            path: paths.dashboard.publisher.all,
+          },
+          {
+            title: 'Deleted',
+            path: paths.dashboard.publisher.delete,
+          },
+        ],
       },
     ],
   },

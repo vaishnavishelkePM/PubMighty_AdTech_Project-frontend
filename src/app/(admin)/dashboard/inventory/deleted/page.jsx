@@ -1,7 +1,11 @@
 import InventoryView from 'src/sections/dashboard/inventories/inventory-view';
 
-export const metadata = { title: 'Inventory' };
+// (optional but nice for <head> title)
+export const metadata = {
+  title: 'Inventory - Deleted | PubMighty Dashboard',
+};
 
-export default function Page() {
-  return <InventoryView />;
+export default function InventoryDeletedPage() {
+  // We pass a mode, so InventoryView can know it's the "deleted" screen
+  return <InventoryView mode="deleted" />;
 }
