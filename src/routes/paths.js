@@ -31,9 +31,11 @@ export const paths = {
 
     partners: {
       root: `${ROOTS.DASHBOARD}/partners`,
+      all: `${ROOTS.DASHBOARD}/partners`,
       new: `${ROOTS.DASHBOARD}/partners/new`,
       details: (id) => `${ROOTS.DASHBOARD}/partners/${id}`,
       edit: (id) => `${ROOTS.DASHBOARD}/partners/${id}/edit`,
+      delete: `${ROOTS.DASHBOARD}/partners/deleted`,
     },
     inventory: {
       root: `${ROOTS.DASHBOARD}/inventory`,
@@ -48,9 +50,11 @@ export const paths = {
     },
     publisher: {
       root: `${ROOTS.DASHBOARD}/publishers`,
+      all: `${ROOTS.DASHBOARD}/publishers`,
       list: `${ROOTS.DASHBOARD}/publishers/list`,
       create: `${ROOTS.DASHBOARD}/publishers/add`,
       edit: (id) => `${ROOTS.DASHBOARD}/publishers/${id}`,
+      delete: `${ROOTS.DASHBOARD}/publishers/deleted`,
     },
     // admin: {
     //   root: `${ROOTS.DASHBOARD}/admin`,

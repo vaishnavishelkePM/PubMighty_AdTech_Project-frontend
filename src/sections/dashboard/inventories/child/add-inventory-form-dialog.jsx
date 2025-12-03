@@ -2,11 +2,10 @@
 
 // import axios from 'axios';
 // import { toast } from 'react-toastify';
-// import { useMemo, useState } from 'react';
+// import { useMemo, useState, useEffect } from 'react';
 
 // import {
 //   Box,
-//   Grid,
 //   Slide,
 //   Button,
 //   Dialog,
@@ -14,6 +13,7 @@
 //   MenuItem,
 //   TextField,
 //   IconButton,
+//   Typography,
 //   DialogTitle,
 //   DialogActions,
 //   DialogContent,
@@ -24,6 +24,7 @@
 // import { CONFIG } from 'src/global-config';
 
 // import { Iconify } from 'src/components/iconify';
+// import PublisherInventorySelector from 'src/components/selectors/inventory/publisher-selector';
 
 // const TYPES = [
 //   { label: 'WEB', value: 'WEB' },
@@ -32,33 +33,31 @@
 // ];
 
 // const STATUS = [
-//   { label: 'Inactive ', value: 0 },
-//   { label: 'Active ', value: 1 },
-//   { label: 'Blocked ', value: 2 },
+//   { label: 'Inactive', value: 0 },
+//   { label: 'Active', value: 1 },
+//   { label: 'Blocked', value: 2 },
 // ];
 
-// const ADS_TXT = [
-//   { label: 'Not verified ', value: 0 },
-//   { label: 'Verified ', value: 1 },
-//   { label: 'Failed ', value: 2 },
+// const PARTNER_STATUS = [
+//   { label: 'Inactive (0)', value: 0 },
+//   { label: 'Active (1)', value: 1 },
+//   { label: 'Blocked (2)', value: 2 },
 // ];
+
+// const INITIAL_FORM = {
+//   publisherId: '',
+//   type: 'WEB',
+//   name: '',
+//   url: '',
+//   description: '',
+//   partnerStatus: 1,
+//   status: 1,
+// };
 
 // export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
-//   const [form, setForm] = useState({
-//     publisherId: '',
-//     type: 'WEB',
-//     name: '',
-//     url: '',
-//     developerWeb: '',
-//     description: '',
-//     logo: '',
-//     adsTxtStatus: 0,
-//     partnerStatus: 1,
-//     status: 1,
-//     packageName: '',
-//   });
-
+//   const [form, setForm] = useState(INITIAL_FORM);
 //   const [saving, setSaving] = useState(false);
+//   const [selectedInventory, setSelectedInventory] = useState(null);
 
 //   const token = getCookie('session_key');
 //   const headers = useMemo(
@@ -69,11 +68,17 @@
 //     [token]
 //   );
 
-//   // validation
+//   useEffect(() => {
+//     if (open) {
+//       setForm(INITIAL_FORM);
+//       setSelectedInventory(null);
+//     }
+//   }, [open]);
+
 //   const validate = () => {
-//     if (!form.publisherId) return 'publisherId is required';
-//     if (!form.type) return 'type is required';
-//     if (!form.name) return 'name is required';
+//     if (!form.publisherId) return 'Publisher is required';
+//     if (!form.type) return 'Type is required';
+//     if (!form.name) return 'Inventory name is required';
 //     if (form.type === 'WEB' && !form.url) return 'WEB inventory must include a valid URL';
 //     return null;
 //   };
@@ -92,13 +97,7 @@
 //     const payload = {
 //       ...form,
 //       publisherId: form.publisherId ? Number(form.publisherId) : undefined,
-//       adsTxtStatus: form.adsTxtStatus !== '' ? Number(form.adsTxtStatus) : 0,
-//       partnerStatus: form.partnerStatus !== '' ? Number(form.partnerStatus) : 1,
-//       status: form.status !== '' ? Number(form.status) : 1,
 //       url: form.url?.trim() || '',
-//       developerWeb: form.developerWeb?.trim() || '',
-//       logo: form.logo?.trim() || '',
-//       packageName: form.packageName?.trim() || '',
 //       description: form.description ?? '',
 //     };
 
@@ -109,8 +108,6 @@
 //         headers,
 //         validateStatus: () => true,
 //       });
-
-//       console.log('Create Inventory →', res.status, res.data);
 
 //       if (res?.data?.success) {
 //         toast.success(res.data?.msg || 'Inventory created');
@@ -126,10 +123,15 @@
 //     }
 //   };
 
+//   const handleClose = () => {
+//     if (saving) return;
+//     onClose?.(false);
+//   };
+
 //   return (
 //     <Dialog
 //       open={open}
-//       onClose={onClose}
+//       onClose={handleClose}
 //       fullWidth
 //       maxWidth="md"
 //       TransitionComponent={Slide}
@@ -155,11 +157,11 @@
 //         }}
 //       >
 //         <Iconify icon="mdi:calendar-plus" width={22} />
-//         Add Inventory
+//         Properties
 //         <Box sx={{ flex: 1 }} />
 //         <IconButton
 //           aria-label="Close"
-//           onClick={() => onClose(false)}
+//           onClick={handleClose}
 //           edge="end"
 //           sx={{
 //             ml: 1,
@@ -180,24 +182,70 @@
 //           bgcolor: 'background.default',
 //         }}
 //       >
-//         <Grid container spacing={2} sx={{ pt: 1 }}>
-//           <Grid item xs={12} sm={4}>
+//         {/* 2-column layout exactly like the screenshot */}
+//         <Box
+//           sx={{
+//             display: 'grid',
+//             gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+//             columnGap: 2,
+//             rowGap: 2,
+//             pt: 1,
+//           }}
+//         >
+//           {/* Upload photo – left col, spans 2 rows */}
+//           <Box
+//             sx={(theme) => ({
+//               gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+//               gridRow: { xs: 'auto', sm: '1 / 3' },
+//               borderRadius: 2,
+//               border: `1px dashed ${theme.palette.divider}`,
+//               bgcolor: theme.palette.background.paper,
+//               display: 'flex',
+//               flexDirection: 'column',
+//               alignItems: 'center',
+//               justifyContent: 'center',
+//               textAlign: 'center',
+//               px: 2,
+//               py: 3,
+//             })}
+//           >
+//             <Iconify icon="mdi:cloud-upload-outline" width={30} />
+//             <Typography variant="subtitle2" sx={{ mt: 1 }}>
+//               Upload photo
+//             </Typography>
+//             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+//               Allowed *.jpeg, *.jpg, *.png, *.gif, max size of 3 Mb
+//             </Typography>
+//           </Box>
+
+//           {/* Inventory Name – right, row 1 */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+//               gridRow: { xs: 'auto', sm: '1 / 2' },
+//             }}
+//           >
 //             <TextField
 //               fullWidth
-//               label="Publisher ID"
-//               type="number"
-//               value={form.publisherId}
-//               onChange={handleChange('publisherId')}
+//               label="Inventory Name"
+//               value={form.name}
+//               onChange={handleChange('name')}
 //               InputLabelProps={{ shrink: true }}
 //               required
 //             />
-//           </Grid>
+//           </Box>
 
-//           <Grid item xs={12} sm={4}>
+//           {/* Type – right, row 2 */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+//               gridRow: { xs: 'auto', sm: '2 / 3' },
+//             }}
+//           >
 //             <TextField
 //               select
-//               label="Type"
 //               fullWidth
+//               label="Type"
 //               value={form.type}
 //               onChange={handleChange('type')}
 //               InputLabelProps={{ shrink: true }}
@@ -209,13 +257,55 @@
 //                 </MenuItem>
 //               ))}
 //             </TextField>
-//           </Grid>
+//           </Box>
 
-//           <Grid item xs={12} sm={4}>
+//           {/* Partner Status – left, row 3 */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+//             }}
+//           >
 //             <TextField
 //               select
-//               label="Status"
 //               fullWidth
+//               label="Partner Status"
+//               value={form.partnerStatus}
+//               onChange={handleChange('partnerStatus')}
+//               InputLabelProps={{ shrink: true }}
+//             >
+//               {PARTNER_STATUS.map((s) => (
+//                 <MenuItem key={s.value} value={s.value}>
+//                   {s.label}
+//                 </MenuItem>
+//               ))}
+//             </TextField>
+//           </Box>
+
+//           {/* URL – right, row 3 */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+//             }}
+//           >
+//             <TextField
+//               fullWidth
+//               label="URL"
+//               value={form.url}
+//               onChange={handleChange('url')}
+//               InputLabelProps={{ shrink: true }}
+//             />
+//           </Box>
+
+//           {/* Status – left, row 4 */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+//             }}
+//           >
+//             <TextField
+//               select
+//               fullWidth
+//               label="Status"
 //               value={form.status}
 //               onChange={handleChange('status')}
 //               InputLabelProps={{ shrink: true }}
@@ -226,103 +316,47 @@
 //                 </MenuItem>
 //               ))}
 //             </TextField>
-//           </Grid>
+//           </Box>
 
-//           <Grid item xs={12} sm={6}>
-//             <TextField
-//               label="Name"
+//           {/* Publisher – right, row 4 (selector) */}
+//           <Box
+//             sx={{
+//               gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+//             }}
+//           >
+//             <PublisherInventorySelector
+//               label="Publisher"
+//               placeholder="Type publisher ID or username…"
 //               fullWidth
-//               value={form.name}
-//               onChange={handleChange('name')}
-//               InputLabelProps={{ shrink: true }}
-//               required
+//               statusFilter={1} // only active, change if needed
+//               valueId={selectedInventory?.id}
+//               onInventorySelect={(inventoryId, inventory) => {
+//                 setSelectedInventory(inventory || null);
+//                 setForm((prev) => ({
+//                   ...prev,
+//                   publisherId: inventory?.publisherId || '',
+//                 }));
+//               }}
 //             />
-//           </Grid>
+//           </Box>
 
-//           <Grid item xs={12} sm={6}>
+//           {/* Description – full width bottom row */}
+//           <Box
+//             sx={{
+//               gridColumn: '1 / -1',
+//             }}
+//           >
 //             <TextField
-//               label="Logo URL"
 //               fullWidth
-//               value={form.logo}
-//               onChange={handleChange('logo')}
-//               InputLabelProps={{ shrink: true }}
-//             />
-//           </Grid>
-
-//           <Grid item xs={12} sm={8}>
-//             <TextField
-//               label="URL (required for WEB)"
-//               fullWidth
-//               value={form.url}
-//               onChange={handleChange('url')}
-//               InputLabelProps={{ shrink: true }}
-//             />
-//           </Grid>
-
-//           <Grid item xs={12} sm={4}>
-//             <TextField
-//               label="Developer Site"
-//               fullWidth
-//               value={form.developerWeb}
-//               onChange={handleChange('developerWeb')}
-//               InputLabelProps={{ shrink: true }}
-//             />
-//           </Grid>
-
-//           <Grid item xs={12} sm={8}>
-//             <TextField
 //               label="Description"
-//               fullWidth
 //               multiline
-//               minRows={2}
+//               minRows={3}
 //               value={form.description}
 //               onChange={handleChange('description')}
 //               InputLabelProps={{ shrink: true }}
 //             />
-//           </Grid>
-
-//           <Grid item xs={12} sm={4}>
-//             <TextField
-//               label="Package Name"
-//               fullWidth
-//               value={form.packageName}
-//               onChange={handleChange('packageName')}
-//               InputLabelProps={{ shrink: true }}
-//             />
-//           </Grid>
-
-//           <Grid item xs={12} sm={6}>
-//             <TextField
-//               select
-//               label="ads.txt status"
-//               fullWidth
-//               value={form.adsTxtStatus}
-//               onChange={handleChange('adsTxtStatus')}
-//               InputLabelProps={{ shrink: true }}
-//             >
-//               {ADS_TXT.map((s) => (
-//                 <MenuItem key={s.value} value={s.value}>
-//                   {s.label}
-//                 </MenuItem>
-//               ))}
-//             </TextField>
-//           </Grid>
-
-//           <Grid item xs={12} sm={6}>
-//             <TextField
-//               select
-//               label="Partner Status"
-//               fullWidth
-//               value={form.partnerStatus}
-//               onChange={handleChange('partnerStatus')}
-//               InputLabelProps={{ shrink: true }}
-//             >
-//               <MenuItem value={0}>Inactive (0)</MenuItem>
-//               <MenuItem value={1}>Active (1)</MenuItem>
-//               <MenuItem value={2}>Blocked (2)</MenuItem>
-//             </TextField>
-//           </Grid>
-//         </Grid>
+//           </Box>
+//         </Box>
 //       </DialogContent>
 
 //       <DialogActions
@@ -336,11 +370,16 @@
 //           gap: 1,
 //         }}
 //       >
-//         <Button onClick={onClose} disabled={saving}>
+//         <Button onClick={handleClose} disabled={saving}>
 //           Cancel
 //         </Button>
-//         <Button onClick={handleSave} variant="contained" disabled={saving}>
-//           {saving ? 'Saving...' : 'Create'}
+//         <Button
+//           onClick={handleSave}
+//           variant="contained"
+//           disabled={saving}
+//           startIcon={<Iconify icon="mdi:plus" />}
+//         >
+//           {saving ? 'Saving...' : 'Add'}
 //         </Button>
 //       </DialogActions>
 //     </Dialog>
@@ -355,7 +394,6 @@ import { useMemo, useState, useEffect } from 'react';
 
 import {
   Box,
-  Grid,
   Slide,
   Button,
   Dialog,
@@ -363,6 +401,7 @@ import {
   MenuItem,
   TextField,
   IconButton,
+  Typography,
   DialogTitle,
   DialogActions,
   DialogContent,
@@ -373,6 +412,10 @@ import { getCookie } from 'src/utils/helper';
 import { CONFIG } from 'src/global-config';
 
 import { Iconify } from 'src/components/iconify';
+import PublisherInventorySelector from 'src/components/selectors/inventory/publisher-selector';
+
+// 👇 avatar + crop section (ADD mode: returns blob to parent)
+import InventoryAvatarSection from 'src/sections/dashboard/inventories/child/inventory-avatar-section';
 
 const TYPES = [
   { label: 'WEB', value: 'WEB' },
@@ -381,15 +424,15 @@ const TYPES = [
 ];
 
 const STATUS = [
+  { label: 'Inactive', value: 0 },
+  { label: 'Active', value: 1 },
+  { label: 'Blocked', value: 2 },
+];
+
+const PARTNER_STATUS = [
   { label: 'Inactive ', value: 0 },
   { label: 'Active ', value: 1 },
   { label: 'Blocked ', value: 2 },
-];
-
-const ADS_TXT = [
-  { label: 'Not verified ', value: 0 },
-  { label: 'Verified ', value: 1 },
-  { label: 'Failed ', value: 2 },
 ];
 
 const INITIAL_FORM = {
@@ -397,40 +440,43 @@ const INITIAL_FORM = {
   type: 'WEB',
   name: '',
   url: '',
-  developerWeb: '',
   description: '',
-  logo: '',
-  adsTxtStatus: 0,
   partnerStatus: 1,
   status: 1,
-  packageName: '',
 };
 
 export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
+  const [selectedInventory, setSelectedInventory] = useState(null);
+
+  // 👇 logo state for ADD mode
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [croppedLogoBlob, setCroppedLogoBlob] = useState(null); // Blob | null
 
   const token = getCookie('session_key');
-  const headers = useMemo(
+
+  // 👇 DO NOT set Content-Type manually when using FormData
+  const authHeaders = useMemo(
     () => ({
-      'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     }),
     [token]
   );
 
-  // Reset form every time dialog opens (fresh create)
   useEffect(() => {
     if (open) {
       setForm(INITIAL_FORM);
+      setSelectedInventory(null);
+      setAvatarPreview('');
+      setCroppedLogoBlob(null);
     }
   }, [open]);
 
-  // validation
   const validate = () => {
-    if (!form.publisherId) return 'publisherId is required';
-    if (!form.type) return 'type is required';
-    if (!form.name) return 'name is required';
+    if (!form.publisherId) return 'Publisher is required';
+    if (!form.type) return 'Type is required';
+    if (!form.name) return 'Inventory name is required';
     if (form.type === 'WEB' && !form.url) return 'WEB inventory must include a valid URL';
     return null;
   };
@@ -446,28 +492,35 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
       return;
     }
 
-    const payload = {
-      ...form,
-      publisherId: form.publisherId ? Number(form.publisherId) : undefined,
-      adsTxtStatus: form.adsTxtStatus !== '' ? Number(form.adsTxtStatus) : 0,
-      partnerStatus: form.partnerStatus !== '' ? Number(form.partnerStatus) : 1,
-      status: form.status !== '' ? Number(form.status) : 1,
-      url: form.url?.trim() || '',
-      developerWeb: form.developerWeb?.trim() || '',
-      logo: form.logo?.trim() || '',
-      packageName: form.packageName?.trim() || '',
-      description: form.description ?? '',
-    };
-
     try {
       setSaving(true);
 
-      const res = await axios.post(`${CONFIG.apiUrl}/v1/admin/inventory`, payload, {
-        headers,
+      // 👇 Use FormData so we can send `logo` file
+      const formData = new FormData();
+
+      formData.append('publisherId', String(form.publisherId));
+      formData.append('type', form.type);
+      formData.append('name', form.name.trim());
+
+      if (form.url) {
+        formData.append('url', form.url.trim());
+      }
+      if (form.description) {
+        formData.append('description', form.description);
+      }
+
+      formData.append('partnerStatus', String(form.partnerStatus));
+      formData.append('status', String(form.status));
+
+      // 👇 attach cropped logo if user uploaded one
+      if (croppedLogoBlob) {
+        formData.append('logo', croppedLogoBlob, 'inventory-logo.jpg');
+      }
+
+      const res = await axios.post(`${CONFIG.apiUrl}/v1/admin/inventory`, formData, {
+        headers: authHeaders,
         validateStatus: () => true,
       });
-
-      console.log('Create Inventory →', res.status, res.data);
 
       if (res?.data?.success) {
         toast.success(res.data?.msg || 'Inventory created');
@@ -517,7 +570,7 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
         }}
       >
         <Iconify icon="mdi:calendar-plus" width={22} />
-        Add Inventory
+        Properties
         <Box sx={{ flex: 1 }} />
         <IconButton
           aria-label="Close"
@@ -542,24 +595,77 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
           bgcolor: 'background.default',
         }}
       >
-        <Grid container spacing={2} sx={{ pt: 1 }}>
-          <Grid item xs={12} sm={4}>
+        {/* 2-column layout exactly like the screenshot */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+            columnGap: 2,
+            rowGap: 2,
+            pt: 1,
+          }}
+        >
+          {/* LEFT: Upload logo / avatar (now real component) */}
+          <Box
+            sx={(theme) => ({
+              gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+              gridRow: { xs: 'auto', sm: '1 / 3' },
+              borderRadius: 2,
+              border: `1px dashed ${theme.palette.divider}`,
+              bgcolor: theme.palette.background.paper,
+              px: 2,
+              py: 2,
+            })}
+          >
+            <InventoryAvatarSection
+              inventoryId={undefined} // ADD mode → only crop + return blob
+              token={token}
+              name={form.name}
+              url={form.url}
+              previewUrl={avatarPreview}
+              onPreviewChange={setAvatarPreview}
+              onAvatarFilenameChange={() => {}}
+              onCroppedBlobChange={setCroppedLogoBlob}
+            />
+
+            {/* Optional tiny helper text below, if you want */}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 1, display: 'block', textAlign: 'center' }}
+            >
+              Allowed *.jpeg, *.jpg, *.png, max size of 3 Mb
+            </Typography>
+          </Box>
+
+          {/* Inventory Name – right, row 1 */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+              gridRow: { xs: 'auto', sm: '1 / 2' },
+            }}
+          >
             <TextField
               fullWidth
-              label="Publisher ID"
-              type="number"
-              value={form.publisherId}
-              onChange={handleChange('publisherId')}
+              label="Inventory Name"
+              value={form.name}
+              onChange={handleChange('name')}
               InputLabelProps={{ shrink: true }}
               required
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={4}>
+          {/* Type – right, row 2 */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+              gridRow: { xs: 'auto', sm: '2 / 3' },
+            }}
+          >
             <TextField
               select
-              label="Type"
               fullWidth
+              label="Type"
               value={form.type}
               onChange={handleChange('type')}
               InputLabelProps={{ shrink: true }}
@@ -571,13 +677,55 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
                 </MenuItem>
               ))}
             </TextField>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={4}>
+          {/* Partner Status – left, row 3 */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+            }}
+          >
             <TextField
               select
-              label="Status"
               fullWidth
+              label="Partner Status"
+              value={form.partnerStatus}
+              onChange={handleChange('partnerStatus')}
+              InputLabelProps={{ shrink: true }}
+            >
+              {PARTNER_STATUS.map((s) => (
+                <MenuItem key={s.value} value={s.value}>
+                  {s.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+
+          {/* URL – right, row 3 */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+            }}
+          >
+            <TextField
+              fullWidth
+              label="URL"
+              value={form.url}
+              onChange={handleChange('url')}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+
+          {/* Status – left, row 4 */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '1 / 2' },
+            }}
+          >
+            <TextField
+              select
+              fullWidth
+              label="Status"
               value={form.status}
               onChange={handleChange('status')}
               InputLabelProps={{ shrink: true }}
@@ -588,103 +736,47 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
                 </MenuItem>
               ))}
             </TextField>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="Name"
+          {/* Publisher – right, row 4 (selector) */}
+          <Box
+            sx={{
+              gridColumn: { xs: '1 / -1', sm: '2 / 3' },
+            }}
+          >
+            <PublisherInventorySelector
+              label="Publisher"
+              placeholder="Type publisher ID or username…"
               fullWidth
-              value={form.name}
-              onChange={handleChange('name')}
-              InputLabelProps={{ shrink: true }}
-              required
+              statusFilter={1} // only active, change if needed
+              valueId={selectedInventory?.id}
+              onInventorySelect={(inventoryId, inventory) => {
+                setSelectedInventory(inventory || null);
+                setForm((prev) => ({
+                  ...prev,
+                  publisherId: inventory?.publisherId || '',
+                }));
+              }}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          {/* Description – full width bottom row */}
+          <Box
+            sx={{
+              gridColumn: '1 / -1',
+            }}
+          >
             <TextField
-              label="Logo URL"
               fullWidth
-              value={form.logo}
-              onChange={handleChange('logo')}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={8}>
-            <TextField
-              label="URL (required for WEB)"
-              fullWidth
-              value={form.url}
-              onChange={handleChange('url')}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={4}>
-            <TextField
-              label="Developer Site"
-              fullWidth
-              value={form.developerWeb}
-              onChange={handleChange('developerWeb')}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={8}>
-            <TextField
               label="Description"
-              fullWidth
               multiline
-              minRows={2}
+              minRows={3}
               value={form.description}
               onChange={handleChange('description')}
               InputLabelProps={{ shrink: true }}
             />
-          </Grid>
-
-          <Grid item xs={12} sm={4}>
-            <TextField
-              label="Package Name"
-              fullWidth
-              value={form.packageName}
-              onChange={handleChange('packageName')}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <TextField
-              select
-              label="ads.txt status"
-              fullWidth
-              value={form.adsTxtStatus}
-              onChange={handleChange('adsTxtStatus')}
-              InputLabelProps={{ shrink: true }}
-            >
-              {ADS_TXT.map((s) => (
-                <MenuItem key={s.value} value={s.value}>
-                  {s.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <TextField
-              select
-              label="Partner Status"
-              fullWidth
-              value={form.partnerStatus}
-              onChange={handleChange('partnerStatus')}
-              InputLabelProps={{ shrink: true }}
-            >
-              <MenuItem value={0}>Inactive (0)</MenuItem>
-              <MenuItem value={1}>Active (1)</MenuItem>
-              <MenuItem value={2}>Blocked (2)</MenuItem>
-            </TextField>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </DialogContent>
 
       <DialogActions
@@ -701,8 +793,13 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
         <Button onClick={handleClose} disabled={saving}>
           Cancel
         </Button>
-        <Button onClick={handleSave} variant="contained" disabled={saving}>
-          {saving ? 'Saving...' : 'Create'}
+        <Button
+          onClick={handleSave}
+          variant="contained"
+          disabled={saving}
+          startIcon={<Iconify icon="mdi:plus" />}
+        >
+          {saving ? 'Saving...' : 'Add'}
         </Button>
       </DialogActions>
     </Dialog>

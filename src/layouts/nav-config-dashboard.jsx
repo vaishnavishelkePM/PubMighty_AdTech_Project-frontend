@@ -46,7 +46,7 @@ export const navData = [
         icon: ICONS.inventory,
         children: [
           {
-            title: 'All',
+            title: 'Active',
             path: paths.dashboard.inventory.all,
           },
           {
@@ -80,11 +80,31 @@ export const navData = [
         title: ' Partners',
         path: paths.dashboard.partners.root,
         icon: ICONS.partner,
+        children: [
+          {
+            title: 'Active',
+            path: paths.dashboard.partners.all,
+          },
+          {
+            title: 'Deleted',
+            path: paths.dashboard.partners.delete,
+          },
+        ],
       },
       {
         title: 'Publishers',
         path: paths.dashboard.publisher.root,
         icon: ICONS.publisher,
+        children: [
+          {
+            title: 'Active',
+            path: paths.dashboard.publisher.all,
+          },
+          {
+            title: 'Deleted',
+            path: paths.dashboard.publisher.delete,
+          },
+        ],
       },
     ],
   },
