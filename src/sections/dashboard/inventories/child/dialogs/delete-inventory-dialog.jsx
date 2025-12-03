@@ -20,3 +20,4 @@ export default function DeleteInventoryDialog({ open, deleting, onCancel, onConf
     </Dialog>
   );
 }
+//testing change

@@ -25,7 +25,7 @@ export default function AvatarPreviewDialog({ open, title, imageUrl, onClose }) 
           justifyContent: 'center',
           alignItems: 'center',
           p: 2,
-        }}
+        }}   //testing change
       >
         {imageUrl ? (
           <Box

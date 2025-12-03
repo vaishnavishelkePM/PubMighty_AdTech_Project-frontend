@@ -414,7 +414,7 @@ import { CONFIG } from 'src/global-config';
 import { Iconify } from 'src/components/iconify';
 import PublisherInventorySelector from 'src/components/selectors/inventory/publisher-selector';
 
-// 👇 avatar + crop section (ADD mode: returns blob to parent)
+//   avatar + crop section (ADD mode: returns blob to parent)
 import InventoryAvatarSection from 'src/sections/dashboard/inventories/child/inventory-avatar-section';
 
 const TYPES = [
@@ -450,13 +450,13 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [selectedInventory, setSelectedInventory] = useState(null);
 
-  // 👇 logo state for ADD mode
+  //   logo state for ADD mode
   const [avatarPreview, setAvatarPreview] = useState('');
   const [croppedLogoBlob, setCroppedLogoBlob] = useState(null); // Blob | null
 
   const token = getCookie('session_key');
 
-  // 👇 DO NOT set Content-Type manually when using FormData
+  //  DO NOT set Content-Type manually when using FormData
   const authHeaders = useMemo(
     () => ({
       Authorization: `Bearer ${token}`,
@@ -495,7 +495,7 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
     try {
       setSaving(true);
 
-      // 👇 Use FormData so we can send `logo` file
+      //   Use FormData so we can send `logo` file
       const formData = new FormData();
 
       formData.append('publisherId', String(form.publisherId));
@@ -512,7 +512,7 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
       formData.append('partnerStatus', String(form.partnerStatus));
       formData.append('status', String(form.status));
 
-      // 👇 attach cropped logo if user uploaded one
+      //   attach cropped logo if user uploaded one
       if (croppedLogoBlob) {
         formData.append('logo', croppedLogoBlob, 'inventory-logo.jpg');
       }

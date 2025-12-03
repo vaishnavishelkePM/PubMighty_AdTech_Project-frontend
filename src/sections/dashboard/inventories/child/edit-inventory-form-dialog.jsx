@@ -44,7 +44,7 @@ const ADS_TXT = [
   { label: 'Not verified', value: 0 },
   { label: 'Verified', value: 1 },
   { label: 'Failed', value: 2 },
-];
+];//testing change
 
 const INITIAL_FORM = {
   publisherId: '',

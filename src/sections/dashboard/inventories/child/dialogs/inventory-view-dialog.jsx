@@ -98,7 +98,7 @@ export default function InventoryViewDialog({ open, selected, onClose, onEdit })
           '&::-webkit-scrollbar-thumb': {
             backgroundColor: (theme) => theme.palette.divider,
             borderRadius: 4,
-          },
+          }, //testing change
         }}
       >
         {!!selected && (

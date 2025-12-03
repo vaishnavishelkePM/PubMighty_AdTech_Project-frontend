@@ -59,7 +59,7 @@ export default function InventoryNotesDialog({ open, inventory, headers, onClose
       setNotesLoading(false);
     }
   };
-
+  //testing change
   // Fetch notes when dialog opens or inventory changes
   useEffect(() => {
     if (!open || !inventory?.id) {
