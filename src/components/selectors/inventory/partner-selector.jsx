@@ -1,11 +1,9 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
-
 import { Box, Avatar, TextField, Typography, Autocomplete, CircularProgress } from '@mui/material';
 
 import { getCookie } from 'src/utils/helper';
-
 import { CONFIG } from 'src/global-config';
 
 const LOAD_MORE_KEY = '__LOAD_MORE__';
@@ -13,7 +11,7 @@ const END_OF_LIST_KEY = '__END_OF_LIST__';
 
 export default function PartnerInventorySelector({
   onInventorySelect,
-  label = 'Select inventory',
+  label = 'Select partner',
   placeholder = 'Type partner ID or username…',
   statusFilter = null,
   valueId = undefined,
@@ -34,7 +32,8 @@ export default function PartnerInventorySelector({
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
 
-  const seenIdsRef = useRef(new Set());
+  // IMPORTANT: track *partner ids*, not inventory ids
+  const seenPartnerIdsRef = useRef(new Set());
   const reqSeqRef = useRef(0);
 
   const debouncedTerm = useDebounce(inputValue, 300);
@@ -53,6 +52,8 @@ export default function PartnerInventorySelector({
         setLoading(true);
         setErrorText('');
 
+        // NOTE: valueId here is assumed to be inventoryId.
+        // For filter prefill by partnerId you can skip this block if not needed.
         const res = await fetch(`${CONFIG.apiUrl}/v1/admin/inventory/${valueId}`, {
           method: 'GET',
           headers: {
@@ -69,23 +70,26 @@ export default function PartnerInventorySelector({
         const inv = json?.data || json?.inventory || null;
         if (inv && inv.id) {
           setSelected(inv);
-          if (!seenIdsRef.current.has(inv.id)) {
-            seenIdsRef.current.add(inv.id);
+
+          const partnerId = inv.partnerId || inv.partner?.id;
+          const key = partnerId || inv.id;
+
+          if (!seenPartnerIdsRef.current.has(key)) {
+            seenPartnerIdsRef.current.add(key);
             setOptions((prev) => [inv, ...prev.filter((o) => !isSpecialOption(o))]);
           }
         }
       } catch {
-        // ignore if not found or endpoint not ready
+        console.log("Error during fetch inventory api ")
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
 
-    // return () => {
-    //   cancelled = true;
-    // };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valueId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [valueId, token]);
 
   // Helpers
 
@@ -95,7 +99,7 @@ export default function PartnerInventorySelector({
     setTotalPages(1);
     setTotalRecords(0);
     setErrorText('');
-    seenIdsRef.current = new Set();
+    seenPartnerIdsRef.current = new Set();
   }
 
   async function fetchPage(targetPage, term) {
@@ -110,21 +114,18 @@ export default function PartnerInventorySelector({
       params.set('sortBy', 'createdAt');
       params.set('sortDir', 'desc');
 
-      // 👉 Decide whether to search by partnerId (numeric) or partnerUsername (text)
+      // Search by partnerId or partnerUsername
       if (term && term.trim()) {
         const trimmed = term.trim();
         const isNumeric = /^[0-9]+$/.test(trimmed);
 
         if (isNumeric) {
-          // Search by PARTNER ID
           params.set('partnerId', trimmed);
         } else {
-          // Search by PARTNER USERNAME
           params.set('partnerUsername', trimmed);
         }
       }
 
-      // Optional status filter
       if (statusFilter !== null && statusFilter !== undefined && statusFilter !== '') {
         params.set('status', String(statusFilter));
       }
@@ -138,7 +139,7 @@ export default function PartnerInventorySelector({
       });
 
       const json = await res.json();
-      if (seq !== reqSeqRef.current) return; // stale response guard
+      if (seq !== reqSeqRef.current) return;
 
       if (!json?.success) {
         throw new Error(json?.msg || 'Request failed');
@@ -151,8 +152,12 @@ export default function PartnerInventorySelector({
 
       const appended = [];
       for (const r of rows) {
-        if (!seenIdsRef.current.has(r.id)) {
-          seenIdsRef.current.add(r.id);
+        const partnerId = r.partnerId || r.partner?.id;
+        if (!partnerId) continue;
+
+        // only one inventory per partner
+        if (!seenPartnerIdsRef.current.has(partnerId)) {
+          seenPartnerIdsRef.current.add(partnerId);
           appended.push(r);
         }
       }
@@ -196,30 +201,23 @@ export default function PartnerInventorySelector({
     }
   }
 
-  // Primary text: Inventory Name or fallback
-  function getOptionPrimaryText(inv) {
-    return inv?.name || `Inventory #${inv?.id ?? ''}`.trim();
+  function getPartnerName(inv) {
+    console.log(inv)
+    return (
+      inv?.partner?.name ||
+      inv?.partner?.email ||
+      (inv?.id ? `PartnerId: ${inv.id}` : 'Unknown partner')
+    );
   }
 
-  // Secondary text: “#inventoryId · partnerUsername · type”
-  function getOptionSecondaryText(inv) {
-    const bits = [];
-    if (inv?.id) bits.push(`#${inv.id}`);
-    if (inv?.partner?.username) bits.push(inv.partner.username);
-    if (inv?.type) bits.push(inv.type);
-    return bits.join(' · ');
+  function getPartnerEmail(inv) {
+    return inv?.partner?.email || '';
   }
 
-  // Tertiary text: partner email or URL
-  function getOptionTertiaryText(inv) {
-    if (inv?.partner?.email) return inv.partner.email;
-    if (inv?.url) return inv.url;
-    return '';
+  function getPartnerIdText(inv) {
+    return inv?.partnerId ? `ID: ${inv.partnerId}` : '';
   }
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
     <Autocomplete
       sx={sx}
@@ -233,48 +231,40 @@ export default function PartnerInventorySelector({
       getOptionLabel={(opt) => {
         if (!opt) return '';
         if (opt.id === LOAD_MORE_KEY || opt.id === END_OF_LIST_KEY) return '';
-        return getOptionPrimaryText(opt);
+        // show only partner name in the input
+        return getPartnerName(opt);
       }}
       onChange={(_, newVal) => {
-        // 1) cleared
         if (!newVal) {
           setSelected(null);
           try {
             onInventorySelect && onInventorySelect(null, null);
-          } catch {
-            // ignore parent errors
-          }
+          } catch {}
           return;
         }
 
-        // 2) load more row
         if (newVal?.id === LOAD_MORE_KEY) {
           handleLoadMoreClick();
           return;
         }
 
-        // 3) end-of-list footer
         if (newVal?.id === END_OF_LIST_KEY) {
           return;
         }
 
-        // 4) normal inventory selection
         setSelected(newVal);
+
+        const partnerId = newVal.partnerId || newVal.partner?.id || null;
         try {
-          onInventorySelect && onInventorySelect(newVal.id, newVal);
-        } catch {
-          // parent errors ignored
-        }
+          // send partnerId to parent for filter
+          onInventorySelect && onInventorySelect(partnerId, newVal);
+        } catch {}
       }}
       onInputChange={(_, newInput, reason) => {
-        // handle clear/reset so old search is dropped
         if (reason === 'input' || reason === 'clear' || reason === 'reset') {
           setInputValue(newInput || '');
         }
       }}
-      // CLIENT-SIDE FILTERING:
-      // If numeric: filter by partnerId prefix
-      // Else: filter by partner username prefix
       filterOptions={(opts, state) => {
         const term = (state?.inputValue || '').trim();
         if (!term) return opts;
@@ -289,7 +279,9 @@ export default function PartnerInventorySelector({
 
         if (isNumeric) {
           // match by partnerId
-          filtered = normalOptions.filter((o) => String(o.partnerId || '').startsWith(term));
+          filtered = normalOptions.filter((o) =>
+            String(o.partnerId || '').startsWith(term)
+          );
         } else {
           // match by partner.username
           filtered = normalOptions.filter((o) => {
@@ -319,7 +311,6 @@ export default function PartnerInventorySelector({
         />
       )}
       renderOption={(props, option) => {
-        // Load more row
         if (option?.optionType === 'loadMore') {
           return (
             <li
@@ -337,13 +328,14 @@ export default function PartnerInventorySelector({
             >
               <Box sx={{ py: 1, width: '100%', display: 'flex', alignItems: 'center', gap: 1 }}>
                 {loading ? <CircularProgress size={16} /> : null}
-                <Typography variant="body2">{loading ? 'Loading…' : 'Load more…'}</Typography>
+                <Typography variant="body2">
+                  {loading ? 'Loading…' : 'Load more…'}
+                </Typography>
               </Box>
             </li>
           );
         }
 
-        // End-of-list row
         if (option?.optionType === 'end') {
           return (
             <li
@@ -361,14 +353,11 @@ export default function PartnerInventorySelector({
           );
         }
 
-        const partnerName =
-          option.partner?.username ||
-          option.partner?.email ||
-          (option.partnerId ? `Partner #${option.partnerId}` : '');
+        const partnerName = getPartnerName(option);
+        const partnerEmail = getPartnerEmail(option);
+        const partnerIdText = getPartnerIdText(option);
 
-        const firstLetter = (partnerName || getOptionPrimaryText(option) || '?')
-          .charAt(0)
-          .toUpperCase();
+        const firstLetter = (partnerName || '?').charAt(0).toUpperCase();
 
         const avatarUrl = option.partner?.avatar
           ? `${CONFIG.assetsUrl}/upload/partner/${option.partner.avatar}`
@@ -386,22 +375,29 @@ export default function PartnerInventorySelector({
             >
               <Avatar
                 src={avatarUrl}
-                alt={partnerName || getOptionPrimaryText(option)}
+                alt={partnerName}
                 sx={{ width: 40, height: 40, borderRadius: 1 }}
               >
                 {firstLetter}
               </Avatar>
 
-              <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {getOptionPrimaryText(option)}
+              <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {/* Line 1: partner name */}
+                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                  {partnerName}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {getOptionSecondaryText(option)}
-                </Typography>
-                {getOptionTertiaryText(option) && (
-                  <Typography variant="caption" color="text.secondary">
-                    {getOptionTertiaryText(option)}
+
+                {/* Line 2: Partner ID */}
+                {partnerIdText && (
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {partnerIdText}
+                  </Typography>
+                )}
+
+                {/* Line 3: Partner email */}
+                {partnerEmail && (
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {partnerEmail}
                   </Typography>
                 )}
               </Box>
@@ -413,9 +409,7 @@ export default function PartnerInventorySelector({
   );
 }
 
-// ----------------------------------------------------------------------
 // Debounce hook
-// ----------------------------------------------------------------------
 function useDebounce(value, delay = 300) {
   const [v, setV] = useState(value);
   useEffect(() => {

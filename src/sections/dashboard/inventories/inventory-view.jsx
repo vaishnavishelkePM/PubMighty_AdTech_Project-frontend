@@ -243,9 +243,10 @@ export default function InventoryView() {
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const [menuRow, setMenuRow] = useState(null);
 
-  // 🔹 NEW: Restore confirmation state
   const [restoreRow, setRestoreRow] = useState(null);
   const [restoring, setRestoring] = useState(false);
+
+  const [selectedPublisherInventoryId, setSelectedPublisherInventoryId] = useState(undefined);
 
   const openMenu = (event, row) => {
     setMenuAnchorEl(event.currentTarget);
@@ -518,7 +519,6 @@ export default function InventoryView() {
     }
   };
 
-  // 🔵 RESTORE LOGIC – actual API + redirect to /all
   const handleRestore = async (row) => {
     if (!row?.id) return;
 
@@ -569,7 +569,7 @@ export default function InventoryView() {
     }
   };
 
-  // 🔵 CONFIRM RESTORE – called when user clicks "Restore" in dialog
+  //  CONFIRM RESTORE – called when user clicks "Restore" in dialog
   const confirmRestore = async () => {
     if (!restoreRow) return;
     try {
@@ -696,7 +696,7 @@ export default function InventoryView() {
             >
               <Button variant="contained" onClick={() => setShowFilter((prev) => !prev)}>
                 <Iconify icon="stash:filter" sx={{ width: 20, mr: 1 }} />
-                {showFilter ? 'Hide Filter' : 'Show Filter'}
+                {showFilter ? 'Filter' : 'Filter'}
               </Button>
               <Button variant="contained" onClick={handleCreate}>
                 <Iconify icon="material-symbols:add" sx={{ width: 20, mr: 1 }} />
@@ -716,18 +716,25 @@ export default function InventoryView() {
         <Card sx={{ p: 2, mb: 2 }}>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={3}>
-              <PublisherSelector
-                label="Publisher"
-                placeholder="Type publisher ID or username…"
-                valueId={filters.publisherId ? Number(filters.publisherId) : undefined}
-                onInventorySelect={(_, inv) => {
-                  const publisherId = inv?.publisherId || inv?.publisher?.id || '';
-                  setFilters((prev) => ({
-                    ...prev,
-                    publisherId: publisherId || '',
-                  }));
-                }}
-              />
+          <PublisherSelector
+            label="Publisher"
+            placeholder="Type publisher ID or username…"
+            valueId={selectedPublisherInventoryId}
+            onInventorySelect={(inventoryId, inv) => {
+              const publisherId = inv?.publisherId || inv?.publisher?.id || '';
+
+              setSelectedPublisherInventoryId(inventoryId || undefined);
+
+              setFilters((prev) => ({
+                ...prev,
+                id: '',
+                publisherId: publisherId || '',
+              }));
+
+              console.log('Selected publisherId:', publisherId);
+            }}
+          />
+
             </Grid>
 
             <Grid item xs={12} sm={6} md={3}>
@@ -1068,7 +1075,6 @@ export default function InventoryView() {
         </Box>
       </Card>
 
-      {/* CONTENT: TABLE / LIST */}
       {isLoading ? (
         <Card>
           <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
@@ -1090,8 +1096,7 @@ export default function InventoryView() {
                   <TableCell>Partner</TableCell>
                   <TableCell>ads.txt</TableCell>
                   <TableCell>Updated</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                  {isDeletedRoute && <TableCell>Restore</TableCell>}
+                  <TableCell align="center">Actions</TableCell>  
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1113,7 +1118,7 @@ export default function InventoryView() {
                               alt={publisherName}
                               src={
                                 row.publisher?.avatar
-                                  ? `${CONFIG.assetsUrl}/upload/publisher/${row.publisher.avatar}`
+                                  ? `${CONFIG.assetsUrl}/upload/publishers/${row.publisher.avatar}`
                                   : undefined
                               }
                               sx={{ width: 32, height: 32, fontSize: 14, fontWeight: 600 }}
@@ -1214,21 +1219,22 @@ export default function InventoryView() {
                                 </IconButton>
                               </Tooltip>
                             )}
-                          </Stack>
-                        </TableCell>
-
-                        {isDeletedRoute && (
-                          <TableCell>
-                            <Button
+                            {isDeletedRoute && (
+                              <Tooltip title="Restore">
+                            <IconButton
                               size="small"
                               variant="contained"
                               color="success"
                               onClick={() => setRestoreRow(row)}
                             >
-                              Restore
-                            </Button>
-                          </TableCell>
+                              <Iconify icon="solar:refresh-bold" />
+                            </IconButton>
+                            </Tooltip>
                         )}
+                          </Stack>
+                        </TableCell>
+                              
+                        
                       </TableRow>
                     );
                   })
@@ -1378,18 +1384,7 @@ export default function InventoryView() {
                               )}
                             </Box>
                           </Stack>
-
-                          {isDeletedRoute && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="success"
-                              sx={{ mt: 1 }}
-                              onClick={() => setRestoreRow(row)}
-                            >
-                              Restore
-                            </Button>
-                          )}
+                          
                         </Stack>
                       </Box>
 
@@ -1462,6 +1457,21 @@ export default function InventoryView() {
           </ListItemIcon>
           <ListItemText primary="Edit" />
         </MenuItem>
+        {isDeletedRoute && (
+          <MenuItem
+            size="small"
+             variant="contained"
+            color="success"
+              onClick={() => {setRestoreRow(menuRow)
+              closeMenu();
+                }}
+          >
+       <ListItemIcon sx={{ color: 'success.main' }}>
+       <Iconify icon="solar:refresh-bold" /> 
+        </ListItemIcon>
+        <ListItemText primary="Restore" /> 
+         </MenuItem>
+           )}
 
         {!isDeletedRoute && (
           <MenuItem

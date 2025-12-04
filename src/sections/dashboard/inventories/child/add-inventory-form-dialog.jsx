@@ -413,7 +413,7 @@ import { CONFIG } from 'src/global-config';
 
 import { Iconify } from 'src/components/iconify';
 import PublisherInventorySelector from 'src/components/selectors/inventory/publisher-selector';
-
+import PartnerInventorySelector from 'src/components/selectors/inventory/partner-selector';
 //   avatar + crop section (ADD mode: returns blob to parent)
 import InventoryAvatarSection from 'src/sections/dashboard/inventories/child/inventory-avatar-section';
 
@@ -455,7 +455,8 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
   const [croppedLogoBlob, setCroppedLogoBlob] = useState(null); // Blob | null
 
   const token = getCookie('session_key');
-
+  const [selectedPartnerId, setSelectedPartnerId] = useState();
+  const [selectedPublisherId, setSelectedPublisherId] = useState();
   //  DO NOT set Content-Type manually when using FormData
   const authHeaders = useMemo(
     () => ({
@@ -508,7 +509,9 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
       if (form.description) {
         formData.append('description', form.description);
       }
-
+      if (form.partnerId) {
+        formData.append('partnerId', String(form.partnerId));
+      }
       formData.append('partnerStatus', String(form.partnerStatus));
       formData.append('status', String(form.status));
 
@@ -685,20 +688,22 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
               gridColumn: { xs: '1 / -1', sm: '1 / 2' },
             }}
           >
-            <TextField
-              select
+            <PartnerInventorySelector
+              label="Partner"
+              placeholder="Type Partner ID or username…"
               fullWidth
-              label="Partner Status"
-              value={form.partnerStatus}
-              onChange={handleChange('partnerStatus')}
-              InputLabelProps={{ shrink: true }}
-            >
-              {PARTNER_STATUS.map((s) => (
-                <MenuItem key={s.value} value={s.value}>
-                  {s.label}
-                </MenuItem>
-              ))}
-            </TextField>
+              statusFilter={1} // only active, change if needed
+              valueId={form.partnerId ||selectedPartnerId}
+             onInventorySelect={(inventoryId, inventory) => {
+                 const partnerId =
+                  inventory?.partnerId ??        
+                  inventory?.id ??               
+                  inventoryId ??'';
+                setSelectedPartnerId(partnerId);
+                setForm((prev) => ({ ...prev, partnerId,
+                }));
+                }}
+            />
           </Box>
 
           {/* URL – right, row 3 */}
@@ -749,7 +754,7 @@ export default function AddInventoryFormDialog({ open, onClose, onSuccess }) {
               placeholder="Type publisher ID or username…"
               fullWidth
               statusFilter={1} // only active, change if needed
-              valueId={selectedInventory?.id}
+              valueId={selectedPublisherId}
               onInventorySelect={(inventoryId, inventory) => {
                 setSelectedInventory(inventory || null);
                 setForm((prev) => ({

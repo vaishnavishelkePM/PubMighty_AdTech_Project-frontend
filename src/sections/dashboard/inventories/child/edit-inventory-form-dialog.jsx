@@ -227,8 +227,6 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
         });
       }
 
-      console.log('Update Inventory →', res.status, res.data);
-
       if (res?.data?.success) {
         toast.success(res.data?.msg || 'Inventory updated');
 
@@ -443,7 +441,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
               </Grid>
 
               {/* URL + Developer site */}
-              <Grid item xs={12} sm={8}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Inventory URL (required for WEB)"
                   fullWidth
@@ -453,7 +451,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
                 />
               </Grid>
 
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Developer Site"
                   fullWidth
@@ -464,7 +462,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
               </Grid>
 
               {/* Description + Package */}
-              <Grid item xs={12} sm={8}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Description"
                   fullWidth
@@ -476,7 +474,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
                 />
               </Grid>
 
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Package Name"
                   fullWidth
@@ -513,16 +511,16 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
                   onChange={handleChange('partnerStatus')}
                   InputLabelProps={{ shrink: true }}
                 >
-                  <MenuItem value={0}>Inactive (0)</MenuItem>
-                  <MenuItem value={1}>Active (1)</MenuItem>
-                  <MenuItem value={2}>Blocked (2)</MenuItem>
+                  <MenuItem value={0}>Inactive</MenuItem>
+                  <MenuItem value={1}>Active</MenuItem>
+                  
                 </TextField>
               </Grid>
 
               {/* Logo URL (optional) */}
               <Grid item xs={12}>
                 <TextField
-                  label="Logo URL (optional – used if no file uploaded)"
+                  label="Logo URL (optional)"
                   fullWidth
                   value={form.logo}
                   onChange={handleChange('logo')}

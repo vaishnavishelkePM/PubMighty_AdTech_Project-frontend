@@ -519,10 +519,7 @@ export function PublisherListView() {
                   <TableCell>Status</TableCell>
                   <TableCell>Last Active</TableCell>
                   <TableCell>Updated</TableCell>
-
-                  {isDeletedView && <TableCell>Restore</TableCell>}
-
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
 
@@ -607,8 +604,7 @@ export function PublisherListView() {
                           </Tooltip>
 
                           {/* Edit + Delete only on /all (non-deleted) */}
-                          {!isDeletedView && (
-                            <>
+                        
                               <Tooltip title="Edit">
                                 <IconButton
                                   size="small"
@@ -620,7 +616,7 @@ export function PublisherListView() {
                                   <Iconify icon="mdi:pencil" />
                                 </IconButton>
                               </Tooltip>
-
+                              {!isDeletedView && (
                               <Tooltip title="Delete">
                                 <IconButton
                                   size="small"
@@ -630,23 +626,24 @@ export function PublisherListView() {
                                   <Iconify icon="solar:trash-bin-trash-bold" />
                                 </IconButton>
                               </Tooltip>
-                            </>
                           )}
-                        </Stack>
-                      </TableCell>
-                      {/* Restore column only on deleted view */}
+                          
                       {isDeletedView && (
-                        <TableCell>
-                          <Button
+                       <Tooltip title="Delete">
+                           <IconButton
                             size="small"
                             variant="contained"
                             color="success"
                             onClick={() => setDeleteId(r.id)}
                           >
-                            Restore
-                          </Button>
-                        </TableCell>
+                         <Iconify icon="solar:refresh-bold" />
+                          </IconButton>
+                        </Tooltip>
                       )}
+                        </Stack>
+
+                      </TableCell>
+                     
                     </TableRow>
                   ))
                 ) : (

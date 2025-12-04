@@ -644,16 +644,7 @@ export default function InventoryAvatarSection({
               >
                 {isUploading ? 'Uploading…' : 'Upload Image'}
               </Button>
-
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<Iconify icon="material-symbols:image-outline" />}
-                onClick={handleOpenViewDialog}
-                disabled={!localPreview}
-              >
-                View Image
-              </Button>
+ 
             </Stack>
           </Box>
         </Stack>

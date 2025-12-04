@@ -660,7 +660,7 @@ export default function PartnersView() {
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '50%',
-            bgcolor: isDeletedView ? '#FF5630' : '#00A76F',
+            bgcolor:  '#00A76F',
             color: '#fff',
           }}
         >
@@ -689,9 +689,8 @@ export default function PartnersView() {
                   <TableCell>Last Active</TableCell>
                   <TableCell>Registered</TableCell>
 
-                  <TableCell align="right">Actions</TableCell>
-                  {/* EXTRA RESTORE COLUMN ONLY IN /deleted */}
-                  {isDeletedView && <TableCell>Restore</TableCell>}
+                  <TableCell align="center">Actions</TableCell>
+                
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -788,15 +787,26 @@ export default function PartnersView() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    {/* <TableCell>
                       <ListItemText
                         primary={row.createdAt ? fDate(row.createdAt) : '—'}
                         secondary={row.createdAt ? fTime(row.createdAt) : ''}
                         primaryTypographyProps={{ typography: 'body2' }}
                         secondaryTypographyProps={{ mt: 0.5, component: 'span' }}
                       />
-                    </TableCell>
-
+                    </TableCell> */}
+                       <TableCell>
+                          {row.updatedAt ? (
+                            <Stack spacing={0}>
+                              <Typography variant="body2">{row.createdAt ? fDate(row.createdAt) : '—'}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                               {row.createdAt ? fTime(row.createdAt) : ''}
+                              </Typography>
+                            </Stack>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                         {/* NOTES BUTTON */}
@@ -812,14 +822,13 @@ export default function PartnersView() {
                           </IconButton>
                         </Tooltip>
 
-                        {/* Edit only in active (/all) view */}
-                        {!isDeletedView && (
+                      
                           <Tooltip title="Edit">
                             <IconButton size="small" onClick={() => openEdit(row.id)}>
                               <Iconify icon="solar:pen-bold" />
                             </IconButton>
                           </Tooltip>
-                        )}
+                       
 
                         {/* DELETE button in /all */}
                         {!isDeletedView && (
@@ -833,21 +842,22 @@ export default function PartnersView() {
                             </IconButton>
                           </Tooltip>
                         )}
-                      </Stack>
-                    </TableCell>
-
-                    {isDeletedView && (
-                      <TableCell>
-                        <Button
+                        {isDeletedView && (
+                        <Tooltip title="Restore">
+                         <IconButton
                           size="small"
                           variant="contained"
                           color="success"
                           onClick={() => setDeleteId(row.id)}
                         >
-                          Restore
-                        </Button>
-                      </TableCell>
+                         <Iconify icon="solar:refresh-bold" />
+                         </IconButton>
+                 </Tooltip>
                     )}
+                      </Stack>
+                    </TableCell>
+
+                    
                   </TableRow>
                 ))}
                 <TableNoData notFound={(pagination?.total ?? 0) === 0} />

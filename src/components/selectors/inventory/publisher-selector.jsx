@@ -12,11 +12,9 @@ import { CONFIG } from 'src/global-config';
 const LOAD_MORE_KEY = '__LOAD_MORE__';
 const END_OF_LIST_KEY = '__END_OF_LIST__';
 
-
-
 export default function PublisherInventorySelector({
   onInventorySelect,
-  label = 'Select inventory',
+  label = 'Select publisher',
   placeholder = 'Type publisher ID or username…',
   statusFilter = null,
   valueId = undefined,
@@ -37,18 +35,16 @@ export default function PublisherInventorySelector({
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
 
-  const seenIdsRef = useRef(new Set());
+  // IMPORTANT: track SEEN PUBLISHER IDs, not inventory IDs
+  const seenPublisherIdsRef = useRef(new Set());
   const reqSeqRef = useRef(0);
 
   const debouncedTerm = useDebounce(inputValue, 300);
 
-
   useEffect(() => {
     resetPaging();
     fetchPage(1, debouncedTerm);
-
   }, [debouncedTerm, statusFilter]);
-
 
   useEffect(() => {
     if (valueId == null) return;
@@ -66,7 +62,6 @@ export default function PublisherInventorySelector({
             Authorization: `Bearer ${token}`,
           },
         });
-
         if (!res.ok) throw new Error('Not found');
 
         const json = await res.json();
@@ -75,19 +70,26 @@ export default function PublisherInventorySelector({
         const inv = json?.data || json?.inventory || null;
         if (inv && inv.id) {
           setSelected(inv);
-          if (!seenIdsRef.current.has(inv.id)) {
-            seenIdsRef.current.add(inv.id);
+
+          const publisherId = inv.publisherId || inv.publisher?.id;
+          const key = publisherId || inv.id;
+
+          if (!seenPublisherIdsRef.current.has(key)) {
+            seenPublisherIdsRef.current.add(key);
             setOptions((prev) => [inv, ...prev.filter((o) => !isSpecialOption(o))]);
           }
         }
       } catch {
-        // ignore if not found or endpoint not ready
+        // ignore
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
 
-  }, [valueId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [valueId, token]);
 
   function resetPaging() {
     setOptions([]);
@@ -95,7 +97,7 @@ export default function PublisherInventorySelector({
     setTotalPages(1);
     setTotalRecords(0);
     setErrorText('');
-    seenIdsRef.current = new Set();
+    seenPublisherIdsRef.current = new Set();
   }
 
   async function fetchPage(targetPage, term) {
@@ -110,7 +112,6 @@ export default function PublisherInventorySelector({
       params.set('sortBy', 'createdAt');
       params.set('sortDir', 'desc');
 
-
       if (term && term.trim()) {
         const trimmed = term.trim();
         const isNumeric = /^[0-9]+$/.test(trimmed);
@@ -124,7 +125,6 @@ export default function PublisherInventorySelector({
         }
       }
 
-      // Optional status filter
       if (statusFilter !== null && statusFilter !== undefined && statusFilter !== '') {
         params.set('status', String(statusFilter));
       }
@@ -150,9 +150,14 @@ export default function PublisherInventorySelector({
       const newTotalRecords = Number(pagination.total || rows.length);
 
       const appended = [];
+
       for (const r of rows) {
-        if (!seenIdsRef.current.has(r.id)) {
-          seenIdsRef.current.add(r.id);
+        const publisherId = r.publisherId || r.publisher?.id;
+        if (!publisherId) continue;
+
+        // ✅ only one inventory per publisher
+        if (!seenPublisherIdsRef.current.has(publisherId)) {
+          seenPublisherIdsRef.current.add(publisherId);
           appended.push(r);
         }
       }
@@ -196,25 +201,22 @@ export default function PublisherInventorySelector({
     }
   }
 
-  // Primary text: Inventory Name or fallback
-  function getOptionPrimaryText(inv) {
-    return inv?.name || `Inventory #${inv?.id ?? ''}`.trim();
+  // --------- PUBLISHER-ONLY LABEL HELPERS ---------
+
+  function getPublisherName(inv) {
+    return (
+      inv?.publisher?.username ||
+      inv?.publisher?.email ||
+      (inv?.publisherId ? `PublisherId:${inv.publisherId}` : 'Unknown publisher')
+    );
   }
 
-  // Secondary text: “#inventoryId · publisherUsername · type”
-  function getOptionSecondaryText(inv) {
-    const bits = [];
-    if (inv?.id) bits.push(`#${inv.id}`);
-    if (inv?.publisher?.username) bits.push(inv.publisher.username);
-    if (inv?.type) bits.push(inv.type);
-    return bits.join(' · ');
+  function getPublisherEmail(inv) {
+    return inv?.publisher?.email || '';
   }
 
-  // Tertiary text: publisher email or URL
-  function getOptionTertiaryText(inv) {
-    if (inv?.publisher?.email) return inv.publisher.email;
-    if (inv?.url) return inv.url;
-    return '';
+  function getPublisherIdText(inv) {
+    return inv?.publisherId ? `ID: ${inv.publisherId}` : '';
   }
 
   return (
@@ -230,46 +232,40 @@ export default function PublisherInventorySelector({
       getOptionLabel={(opt) => {
         if (!opt) return '';
         if (opt.id === LOAD_MORE_KEY || opt.id === END_OF_LIST_KEY) return '';
-        return getOptionPrimaryText(opt);
+        return getPublisherName(opt);
       }}
       onChange={(_, newVal) => {
-        // 1) cleared
         if (!newVal) {
           setSelected(null);
           try {
             onInventorySelect && onInventorySelect(null, null);
-          } catch {
-            // ignore parent errors
-          }
+          } catch {}
           return;
         }
 
-        // 2) load more row
         if (newVal?.id === LOAD_MORE_KEY) {
           handleLoadMoreClick();
           return;
         }
 
-        // 3) end-of-list footer
         if (newVal?.id === END_OF_LIST_KEY) {
           return;
         }
 
-        // 4) normal inventory selection
         setSelected(newVal);
+
+        const publisherId = newVal.publisherId || newVal.publisher?.id || null;
+
         try {
-          onInventorySelect && onInventorySelect(newVal.id, newVal);
-        } catch {
-          // parent errors ignored
-        }
+          // you can use publisherId in parent filter
+          onInventorySelect && onInventorySelect(publisherId, newVal);
+        } catch {}
       }}
       onInputChange={(_, newInput, reason) => {
-        // handle clear/reset so old search is dropped
         if (reason === 'input' || reason === 'clear' || reason === 'reset') {
           setInputValue(newInput || '');
         }
       }}
-
       filterOptions={(opts, state) => {
         const term = (state?.inputValue || '').trim();
         if (!term) return opts;
@@ -283,10 +279,10 @@ export default function PublisherInventorySelector({
         let filtered = normalOptions;
 
         if (isNumeric) {
-          // match by publisherId
-          filtered = normalOptions.filter((o) => String(o.publisherId || '').startsWith(term));
+          filtered = normalOptions.filter((o) =>
+            String(o.publisherId || '').startsWith(term)
+          );
         } else {
-          // match by publisher.username
           filtered = normalOptions.filter((o) => {
             const username = o?.publisher?.username || '';
             return username.toLowerCase().startsWith(lower);
@@ -314,7 +310,6 @@ export default function PublisherInventorySelector({
         />
       )}
       renderOption={(props, option) => {
-        // Load more row
         if (option?.optionType === 'loadMore') {
           return (
             <li
@@ -332,13 +327,14 @@ export default function PublisherInventorySelector({
             >
               <Box sx={{ py: 1, width: '100%', display: 'flex', alignItems: 'center', gap: 1 }}>
                 {loading ? <CircularProgress size={16} /> : null}
-                <Typography variant="body2">{loading ? 'Loading…' : 'Load more…'}</Typography>
+                <Typography variant="body2">
+                  {loading ? 'Loading…' : 'Load more…'}
+                </Typography>
               </Box>
             </li>
           );
         }
 
-        // End-of-list row
         if (option?.optionType === 'end') {
           return (
             <li
@@ -356,14 +352,11 @@ export default function PublisherInventorySelector({
           );
         }
 
-        const publisherName =
-          option.publisher?.username ||
-          option.publisher?.email ||
-          (option.publisherId ? `Publisher #${option.publisherId}` : '');
+        const publisherName = getPublisherName(option);
+        const publisherEmail = getPublisherEmail(option);
+        const publisherIdText = getPublisherIdText(option);
 
-        const firstLetter = (publisherName || getOptionPrimaryText(option) || '?')
-          .charAt(0)
-          .toUpperCase();
+        const firstLetter = (publisherName || '?').charAt(0).toUpperCase();
 
         const avatarUrl = option.publisher?.avatar
           ? `${CONFIG.assetsUrl}/upload/publisher/${option.publisher.avatar}`
@@ -381,22 +374,26 @@ export default function PublisherInventorySelector({
             >
               <Avatar
                 src={avatarUrl}
-                alt={publisherName || getOptionPrimaryText(option)}
+                alt={publisherName}
                 sx={{ width: 40, height: 40, borderRadius: 1 }}
               >
                 {firstLetter}
               </Avatar>
 
-              <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {getOptionPrimaryText(option)}
+              <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                  {publisherName}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {getOptionSecondaryText(option)}
-                </Typography>
-                {getOptionTertiaryText(option) && (
-                  <Typography variant="caption" color="text.secondary">
-                    {getOptionTertiaryText(option)}
+
+                {publisherIdText && (
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {publisherIdText}
+                  </Typography>
+                )}
+
+                {publisherEmail && (
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {publisherEmail}
                   </Typography>
                 )}
               </Box>
@@ -407,6 +404,8 @@ export default function PublisherInventorySelector({
     />
   );
 }
+
+
 
 function useDebounce(value, delay = 300) {
   const [v, setV] = useState(value);

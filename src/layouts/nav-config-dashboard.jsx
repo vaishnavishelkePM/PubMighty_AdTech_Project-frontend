@@ -11,10 +11,11 @@ const icon = (name) => <SvgColor src={`${CONFIG.assetsDir}/assets/icons/navbar/$
 
 const ICONS = {
   dashboard: icon('ic-dashboard'),
-  partner: icon('ic-user'),
-  publisher: icon('ic-user'),
+  partner: icon('ic-jobs'),
+  publisher: icon('ic-folder'),
   admin: icon('ic-user'),
   inventory: icon('ic-inventory'),
+  admin_log: icon('ic-admin-log'),
 };
 
 // ----------------------------------------------------------------------
