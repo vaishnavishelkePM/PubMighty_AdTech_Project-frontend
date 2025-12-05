@@ -1,12 +1,16 @@
-
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
-
-import { Box, Avatar, TextField, Typography, Autocomplete, CircularProgress } from '@mui/material';
+import {
+  Box,
+  Avatar,
+  TextField,
+  Typography,
+  Autocomplete,
+  CircularProgress,
+} from '@mui/material';
 
 import { getCookie } from 'src/utils/helper';
-
 import { CONFIG } from 'src/global-config';
 
 const LOAD_MORE_KEY = '__LOAD_MORE__';
@@ -16,8 +20,8 @@ export default function PublisherInventorySelector({
   onInventorySelect,
   label = 'Select publisher',
   placeholder = 'Type publisher ID or username…',
-  statusFilter = null,
-  valueId = undefined,
+  statusFilter = null, // publisher status
+  valueId = undefined, // selected publisherId
   disabled = false,
   fullWidth = true,
   sx,
@@ -35,19 +39,19 @@ export default function PublisherInventorySelector({
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
 
-  // IMPORTANT: track SEEN PUBLISHER IDs, not inventory IDs
-  const seenPublisherIdsRef = useRef(new Set());
   const reqSeqRef = useRef(0);
-
   const debouncedTerm = useDebounce(inputValue, 300);
 
+  // ---------- LOAD LIST WHEN SEARCH / STATUS CHANGES ----------
   useEffect(() => {
     resetPaging();
     fetchPage(1, debouncedTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTerm, statusFilter]);
 
+  // ---------- PRESELECT VALUE ----------
   useEffect(() => {
-    if (valueId == null) return;
+    if (valueId == null || valueId === '') return;
 
     let cancelled = false;
     (async () => {
@@ -55,29 +59,30 @@ export default function PublisherInventorySelector({
         setLoading(true);
         setErrorText('');
 
-        const res = await fetch(`${CONFIG.apiUrl}/v1/admin/inventory/${valueId}`, {
+        // Assumes /v1/admin/publishers/:id exists
+        const res = await fetch(`${CONFIG.apiUrl}/v1/admin/publishers/${valueId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
         });
-        if (!res.ok) throw new Error('Not found');
+
+        if (!res.ok) throw new Error('Publisher not found');
 
         const json = await res.json();
         if (cancelled) return;
 
-        const inv = json?.data || json?.inventory || null;
-        if (inv && inv.id) {
-          setSelected(inv);
+        const pub = json?.data || json?.publisher || null;
+        if (pub && pub.id) {
+          setSelected(pub);
 
-          const publisherId = inv.publisherId || inv.publisher?.id;
-          const key = publisherId || inv.id;
-
-          if (!seenPublisherIdsRef.current.has(key)) {
-            seenPublisherIdsRef.current.add(key);
-            setOptions((prev) => [inv, ...prev.filter((o) => !isSpecialOption(o))]);
-          }
+          setOptions((prev) => {
+            const normal = prev.filter((o) => !isSpecialOption(o));
+            const already = normal.find((o) => o.id === pub.id);
+            if (already) return prev;
+            return [pub, ...normal, ...prev.filter((o) => isSpecialOption(o))];
+          });
         }
       } catch {
         // ignore
@@ -91,13 +96,13 @@ export default function PublisherInventorySelector({
     };
   }, [valueId, token]);
 
+  // ---------- HELPERS ----------
   function resetPaging() {
     setOptions([]);
     setPage(1);
     setTotalPages(1);
     setTotalRecords(0);
     setErrorText('');
-    seenPublisherIdsRef.current = new Set();
   }
 
   async function fetchPage(targetPage, term) {
@@ -112,24 +117,26 @@ export default function PublisherInventorySelector({
       params.set('sortBy', 'createdAt');
       params.set('sortDir', 'desc');
 
+      // STATUS = publisher status
+      if (statusFilter !== null && statusFilter !== undefined && statusFilter !== '') {
+        params.set('status', String(statusFilter));
+      }
+
+      // SIMPLE SEARCH:
+      // numeric → by id
+      // text → by username/email (backend: adjust as per your API)
       if (term && term.trim()) {
         const trimmed = term.trim();
         const isNumeric = /^[0-9]+$/.test(trimmed);
 
         if (isNumeric) {
-          // Search by PUBLISHER ID
-          params.set('publisherId', trimmed);
+          params.set('id', trimmed);
         } else {
-          // Search by PUBLISHER USERNAME
-          params.set('publisherUsername', trimmed);
+          params.set('search', trimmed); // e.g. search by username/email in backend
         }
       }
 
-      if (statusFilter !== null && statusFilter !== undefined && statusFilter !== '') {
-        params.set('status', String(statusFilter));
-      }
-
-      const res = await fetch(`${CONFIG.apiUrl}/v1/admin/inventory?${params.toString()}`, {
+      const res = await fetch(`${CONFIG.apiUrl}/v1/admin/publishers?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -141,30 +148,17 @@ export default function PublisherInventorySelector({
       if (seq !== reqSeqRef.current) return;
 
       if (!json?.success) {
-        throw new Error(json?.msg || 'Request failed');
+        throw new Error(json?.msg || json?.message || 'Request failed');
       }
 
-      const rows = json?.data?.rows || json?.data?.inventories || [];
+      const rows = json?.data?.rows || json?.data?.publishers || [];
       const pagination = json?.data?.pagination || {};
       const newTotalPages = Number(pagination.totalPages || 1);
       const newTotalRecords = Number(pagination.total || rows.length);
 
-      const appended = [];
-
-      for (const r of rows) {
-        const publisherId = r.publisherId || r.publisher?.id;
-        if (!publisherId) continue;
-
-        // ✅ only one inventory per publisher
-        if (!seenPublisherIdsRef.current.has(publisherId)) {
-          seenPublisherIdsRef.current.add(publisherId);
-          appended.push(r);
-        }
-      }
-
       setOptions((prev) => {
         const base = targetPage === 1 ? [] : prev.filter((o) => !isSpecialOption(o));
-        const combined = [...base, ...appended];
+        const combined = [...base, ...rows];
         return addFooterRows(combined, targetPage, newTotalPages, newTotalRecords);
       });
 
@@ -201,24 +195,24 @@ export default function PublisherInventorySelector({
     }
   }
 
-  // --------- PUBLISHER-ONLY LABEL HELPERS ---------
-
-  function getPublisherName(inv) {
+  // ---------- LABEL HELPERS ----------
+  function getPublisherName(pub) {
     return (
-      inv?.publisher?.username ||
-      inv?.publisher?.email ||
-      (inv?.publisherId ? `PublisherId:${inv.publisherId}` : 'Unknown publisher')
+      pub?.username ||
+      pub?.email ||
+      (pub?.id ? `PublisherId:${pub.id}` : 'Unknown publisher')
     );
   }
 
-  function getPublisherEmail(inv) {
-    return inv?.publisher?.email || '';
+  function getPublisherEmail(pub) {
+    return pub?.email || '';
   }
 
-  function getPublisherIdText(inv) {
-    return inv?.publisherId ? `ID: ${inv.publisherId}` : '';
+  function getPublisherIdText(pub) {
+    return pub?.id ? `ID: ${pub.id}` : '';
   }
 
+  // ---------- RENDER ----------
   return (
     <Autocomplete
       sx={sx}
@@ -254,11 +248,9 @@ export default function PublisherInventorySelector({
 
         setSelected(newVal);
 
-        const publisherId = newVal.publisherId || newVal.publisher?.id || null;
-
         try {
-          // you can use publisherId in parent filter
-          onInventorySelect && onInventorySelect(publisherId, newVal);
+          // keep prop name the same, but now returns publisherId + publisher object
+          onInventorySelect && onInventorySelect(newVal.id, newVal);
         } catch {}
       }}
       onInputChange={(_, newInput, reason) => {
@@ -267,25 +259,30 @@ export default function PublisherInventorySelector({
         }
       }}
       filterOptions={(opts, state) => {
+        // Let backend handle search; only filter out if needed to keep MUI happy
         const term = (state?.inputValue || '').trim();
         if (!term) return opts;
 
-        const lower = term.toLowerCase();
-        const isNumeric = /^[0-9]+$/.test(term);
-
         const normalOptions = opts.filter((o) => !isSpecialOption(o));
         const footers = opts.filter((o) => isSpecialOption(o));
+
+        const lower = term.toLowerCase();
+        const isNumeric = /^[0-9]+$/.test(term);
 
         let filtered = normalOptions;
 
         if (isNumeric) {
           filtered = normalOptions.filter((o) =>
-            String(o.publisherId || '').startsWith(term)
+            String(o.id || '').startsWith(term)
           );
         } else {
           filtered = normalOptions.filter((o) => {
-            const username = o?.publisher?.username || '';
-            return username.toLowerCase().startsWith(lower);
+            const username = o?.username || '';
+            const email = o?.email || '';
+            return (
+              username.toLowerCase().includes(lower) ||
+              email.toLowerCase().includes(lower)
+            );
           });
         }
 
@@ -325,11 +322,18 @@ export default function PublisherInventorySelector({
               }}
               style={{ cursor: loading ? 'default' : 'pointer' }}
             >
-              <Box sx={{ py: 1, width: '100%', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                sx={{
+                  py: 1,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                }}
+              >
                 {loading ? <CircularProgress size={16} /> : null}
-                <Typography variant="body2">
-                  {loading ? 'Loading…' : 'Load more…'}
-                </Typography>
+                <Typography variant="body2">Load more publishers</Typography>
               </Box>
             </li>
           );
@@ -343,9 +347,15 @@ export default function PublisherInventorySelector({
               aria-disabled
               onMouseDown={(e) => e.preventDefault()}
             >
-              <Box sx={{ py: 1, width: '100%', textAlign: 'center' }}>
+              <Box
+                sx={{
+                  py: 1,
+                  width: '100%',
+                  textAlign: 'center',
+                }}
+              >
                 <Typography variant="caption" color="text.secondary">
-                  — End of list ({option?.total ?? 0} items loaded) —
+                  End of list ({option.total ?? totalRecords})
                 </Typography>
               </Box>
             </li>
@@ -358,8 +368,8 @@ export default function PublisherInventorySelector({
 
         const firstLetter = (publisherName || '?').charAt(0).toUpperCase();
 
-        const avatarUrl = option.publisher?.avatar
-          ? `${CONFIG.assetsUrl}/upload/publisher/${option.publisher.avatar}`
+        const avatarUrl = option.avatar
+          ? `${CONFIG.assetsUrl}/upload/publishers/${option.avatar}`
           : '';
 
         return (
@@ -404,8 +414,6 @@ export default function PublisherInventorySelector({
     />
   );
 }
-
-
 
 function useDebounce(value, delay = 300) {
   const [v, setV] = useState(value);

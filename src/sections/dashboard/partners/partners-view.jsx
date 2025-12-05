@@ -487,7 +487,7 @@ export default function PartnersView() {
         </Box>
       </Box>
 
-      {/* Filters */}
+ 
       <Collapse in={showFilter} timeout="auto" unmountOnExit>
         <Card sx={{ p: 2, mb: 2 }}>
           <Box
@@ -636,7 +636,6 @@ export default function PartnersView() {
         </Card>
       </Collapse>
 
-      {/* KPI card */}
       <Card
         sx={{
           display: 'flex',

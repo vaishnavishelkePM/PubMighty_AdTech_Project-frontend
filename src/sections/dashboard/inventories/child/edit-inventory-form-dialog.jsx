@@ -1,7 +1,4 @@
-
-
 'use client';
-
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -22,10 +19,9 @@ import {
   DialogContent,
 } from '@mui/material';
 
+import PublisherSelector from 'src/components/selectors/inventory/publisher-selector';
 import { getCookie } from 'src/utils/helper';
-
 import { CONFIG } from 'src/global-config';
-
 import { Iconify } from 'src/components/iconify';
 
 const TYPES = [
@@ -35,16 +31,16 @@ const TYPES = [
 ];
 
 const STATUS = [
-  { label: 'Inactive', value: 0 },
-  { label: 'Active', value: 1 },
-  { label: 'Blocked', value: 2 },
+  { label: 'Pending', value: 0 },
+  { label: 'Approved', value: 1 },
+  { label: 'Rejected', value: 2 },
 ];
 
 const ADS_TXT = [
-  { label: 'Not verified', value: 0 },
-  { label: 'Verified', value: 1 },
-  { label: 'Failed', value: 2 },
-];//testing change
+  { label: 'Invalid', value: 0 },
+  { label: 'Valid', value: 1 },
+  { label: 'Not Found', value: 2 },
+];
 
 const INITIAL_FORM = {
   publisherId: '',
@@ -69,6 +65,9 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
   const fileInputRef = useRef(null);
+
+  // NEW: track selected publisher for selector
+  const [selectedPublisherId, setSelectedPublisherId] = useState('');
 
   const token = getCookie('session_key');
 
@@ -102,8 +101,10 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
               : `${CONFIG.assetsUrl}/upload/inventory/${logoDbValue}`;
           }
 
+          const publisherId = d.publisherId ?? '';
+
           setForm({
-            publisherId: d.publisherId ?? '',
+            publisherId,
             type: d.type ?? 'WEB',
             name: d.name ?? '',
             url: d.url ?? '',
@@ -115,6 +116,8 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
             status: d.status ?? 1,
             packageName: d.packageName ?? '',
           });
+
+          setSelectedPublisherId(publisherId || '');
 
           setLogoFile(null);
           setLogoPreview(previewUrl);
@@ -144,7 +147,6 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
     const value = e.target.value;
     setForm((prev) => ({ ...prev, [key]: value }));
 
-    // If user edits logo URL manually, update preview
     if (key === 'logo') {
       if (!value) {
         setLogoPreview('');
@@ -211,7 +213,6 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
           }
         });
 
-        // field name must match multer: upload.single('logo')
         formData.append('logo', logoFile);
 
         res = await axios.put(url, formData, {
@@ -229,11 +230,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
 
       if (res?.data?.success) {
         toast.success(res.data?.msg || 'Inventory updated');
-
-        // Try to get updated inventory from API response
         const updatedInventory = res?.data?.data || null;
-
-        // Notify parent so it can update rows (like PartnersView avatar logic)
         onSuccess?.(updatedInventory);
       } else {
         toast.error(res?.data?.msg || res?.data?.message || 'Update failed');
@@ -262,7 +259,7 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
       TransitionProps={{ direction: 'up' }}
       PaperProps={{
         sx: (theme) => ({
-          borderRadius: { xs: 2, sm: 3 },
+          borderRadius: 3,
           overflow: 'hidden',
           boxShadow: theme.shadows[24],
           border: `1px solid ${theme.palette.divider}`,
@@ -277,12 +274,12 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
           typography: 'h6',
           display: 'flex',
           alignItems: 'center',
-          gap: 1.5,
+          gap: 1,
         }}
       >
-        <Iconify icon="mdi:calendar-plus" width={22} />
-        Edit Inventory
-        <Box sx={{ flex: 1 }} />
+        <Iconify icon="mdi:tag-outline" width={22} />
+        Properties
+        <Box sx={{ flexGrow: 1 }} />
         <IconButton
           aria-label="Close"
           onClick={handleClose}
@@ -307,185 +304,199 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
         }}
       >
         {/* Hidden file input */}
-        <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleLogoChange} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleLogoChange}
+        />
 
         <Box
           sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1.2fr 1.8fr' },
-            columnGap: 2,
-            rowGap: 2,
-            pt: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2.5,
           }}
         >
-          {/* LEFT: Logo card */}
+          {/* Upload photo bar */}
           <Box
             onClick={handleClickLogo}
             sx={(theme) => ({
-              gridColumn: { xs: '1 / -1', sm: '1 / 2' },
               borderRadius: 2,
-              border: `1px dashed ${theme.palette.divider}`,
+              border: `1px solid ${theme.palette.divider}`,
               bgcolor: theme.palette.background.paper,
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              px: 2,
-              py: 3,
+              gap: 2,
+              px: 2.5,
+              py: 3.5,
               cursor: 'pointer',
-              overflow: 'hidden',
             })}
           >
-            {logoPreview ? (
-              <>
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 1.5,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'grey.100',
+              }}
+            >
+              {logoPreview ? (
                 <Box
                   component="img"
                   src={logoPreview}
                   alt="Inventory logo"
                   sx={{
                     width: '100%',
-                    maxWidth: 220,
-                    height: 'auto',
-                    borderRadius: 2,
-                    mb: 1.5,
+                    height: '100%',
                     objectFit: 'cover',
                   }}
                 />
+              ) : (
+                <Iconify icon="mdi:image-outline" width={32} />
+              )}
+            </Box>
 
-                <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
-                  Click to change logo
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Allowed *.jpeg, *.jpg, *.png, *.gif
-                </Typography>
-              </>
-            ) : (
-              <>
-                <Iconify icon="mdi:cloud-upload-outline" width={30} />
-                <Typography variant="subtitle2" sx={{ mt: 1 }}>
-                  Upload logo
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Allowed *.jpeg, *.jpg, *.png, *.gif, max size of 3 Mb
-                </Typography>
-              </>
-            )}
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="subtitle2">Upload photo</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Allowed *.jpeg, *.jpg, *.png, *.gif, max size of 3 Mb
+              </Typography>
+            </Box>
           </Box>
 
-          {/* RIGHT: Fields */}
-          <Box
-            sx={{
-              gridColumn: { xs: '1 / -1', sm: '2 / 3' },
-            }}
-          >
-            <Grid container spacing={2}>
-              {/* Publisher + Type */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Publisher ID"
-                  type="number"
-                  value={form.publisherId}
-                  onChange={handleChange('publisherId')}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
+          {/* Form fields */}
+          <Grid container spacing={2}>
+            {/* Row 1: Inventory Name / URL */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Inventory Name"
+                fullWidth
+                value={form.name}
+                onChange={handleChange('name')}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
 
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  select
-                  label="Type"
-                  fullWidth
-                  value={form.type}
-                  onChange={handleChange('type')}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                >
-                  {TYPES.map((t) => (
-                    <MenuItem key={t.value} value={t.value}>
-                      {t.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="URL"
+                fullWidth
+                value={form.url}
+                onChange={handleChange('url')}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
 
-              {/* Name + Status */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Inventory Name"
-                  fullWidth
-                  value={form.name}
-                  onChange={handleChange('name')}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
+            {/* Row 2: Type / Publisher selector */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                label="Type"
+                fullWidth
+                value={form.type}
+                onChange={handleChange('type')}
+                InputLabelProps={{ shrink: true }}
+                required
+              >
+                {TYPES.map((t) => (
+                  <MenuItem key={t.value} value={t.value}>
+                    {t.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
 
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  select
-                  label="Status"
-                  fullWidth
-                  value={form.status}
-                  onChange={handleChange('status')}
-                  InputLabelProps={{ shrink: true }}
-                >
-                  {STATUS.map((s) => (
-                    <MenuItem key={s.value} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
+            <Grid item xs={12} sm={6}>
+             <PublisherSelector
+                    label="Publisher"
+                    placeholder="Type publisher ID or username…"
+                    fullWidth
+                    statusFilter={1}
+                    valueId={selectedPublisherId || ''}
+                    onInventorySelect={(publisherId, publisher) => {
+                      const finalId = publisherId || publisher?.id || '';
+                      setSelectedPublisherId(finalId);
+                      setForm((prev) => ({
+                        ...prev,
+                        publisherId: finalId,
+                      }));
+                    }}
+                  />
+            </Grid>
 
-              {/* URL + Developer site */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Inventory URL (required for WEB)"
-                  fullWidth
-                  value={form.url}
-                  onChange={handleChange('url')}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
+            {/* Row 3: Partner Status / Developer Site */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                label="Partner Status"
+                fullWidth
+                value={form.partnerStatus}
+                onChange={handleChange('partnerStatus')}
+                InputLabelProps={{ shrink: true }}
+              >
+                <MenuItem value={0}>Inactive</MenuItem>
+                <MenuItem value={1}>Active</MenuItem>
+              </TextField>
+            </Grid>
 
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Developer Site"
-                  fullWidth
-                  value={form.developerWeb}
-                  onChange={handleChange('developerWeb')}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Developer Site"
+                fullWidth
+                value={form.developerWeb}
+                onChange={handleChange('developerWeb')}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
 
-              {/* Description + Package */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Description"
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  value={form.description}
-                  onChange={handleChange('description')}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
+            {/* Row 4: Description / Status + extras */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Description"
+                fullWidth
+                multiline
+                minRows={4}
+                value={form.description}
+                onChange={handleChange('description')}
+                InputLabelProps={{ shrink: true }}
+              />
 
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Package Name"
-                  fullWidth
-                  value={form.packageName}
-                  onChange={handleChange('packageName')}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
+              <TextField
+                sx={{ mt: 2 }}
+                label="Logo URL (optional)"
+                fullWidth
+                value={form.logo}
+                onChange={handleChange('logo')}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
 
-              {/* ads.txt + Partner status */}
-              <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                select
+                label="Status"
+                fullWidth
+                value={form.status}
+                onChange={handleChange('status')}
+                InputLabelProps={{ shrink: true }}
+              >
+                {STATUS.map((s) => (
+                  <MenuItem key={s.value} value={s.value}>
+                    {s.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <Box
+                sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+              >
                 <TextField
                   select
                   label="ads.txt Status"
@@ -500,36 +511,17 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
                     </MenuItem>
                   ))}
                 </TextField>
-              </Grid>
 
-              <Grid item xs={12} sm={6}>
                 <TextField
-                  select
-                  label="Partner Status"
+                  label="Package Name"
                   fullWidth
-                  value={form.partnerStatus}
-                  onChange={handleChange('partnerStatus')}
+                  value={form.packageName}
+                  onChange={handleChange('packageName')}
                   InputLabelProps={{ shrink: true }}
-                >
-                  <MenuItem value={0}>Inactive</MenuItem>
-                  <MenuItem value={1}>Active</MenuItem>
-                  
-                </TextField>
-              </Grid>
-
-              {/* Logo URL (optional) */}
-              <Grid item xs={12}>
-                <TextField
-                  label="Logo URL (optional)"
-                  fullWidth
-                  value={form.logo}
-                  onChange={handleChange('logo')}
-                  InputLabelProps={{ shrink: true }}
-                  helperText="If you upload a new logo file, that will be used instead of this URL."
                 />
-              </Grid>
+              </Box>
             </Grid>
-          </Box>
+          </Grid>
         </Box>
       </DialogContent>
 
@@ -537,18 +529,16 @@ export default function EditInventoryFormDialog({ open, onClose, id, onSuccess }
         sx={{
           px: { xs: 2, sm: 3 },
           py: 2,
-          position: { xs: 'sticky', sm: 'static' },
-          bottom: 0,
           bgcolor: 'background.paper',
           borderTop: (theme) => `1px solid ${theme.palette.divider}`,
-          gap: 1,
         }}
       >
+        <Box sx={{ flexGrow: 1 }} />
         <Button onClick={handleClose} disabled={saving}>
           Cancel
         </Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
-          {saving ? 'Saving...' : 'Update'}
+          {saving ? 'Saving...' : 'Save changes'}
         </Button>
       </DialogActions>
     </Dialog>

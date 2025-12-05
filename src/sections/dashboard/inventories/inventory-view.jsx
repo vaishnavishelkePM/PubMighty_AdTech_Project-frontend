@@ -69,8 +69,7 @@ import {
 import AddInventoryFormDialog from './child/add-inventory-form-dialog';
 import EditInventoryFormDialog from './child/edit-inventory-form-dialog';
 import InventoryNotesDialog from './child/dialogs/inventory-notes-dialog';
-
-// ----------------------------------------------------------------------
+import InventoryDetailsDialog from './child/dialogs/inventory-view-dialog';
 
 const TYPES = [
   { label: 'All', value: '' },
@@ -88,8 +87,8 @@ const STATUS = [
 
 const PARTNER_STATUS = [
   { label: 'All', value: '' },
-  { label: 'Unlinked', value: 0 },
-  { label: 'Linked', value: 1 },
+  { label: 'Active', value: 0 },
+  { label: 'Inactive', value: 1 },
   { label: 'Paused', value: 2 },
 ];
 
@@ -168,7 +167,6 @@ export default function InventoryView() {
     return last === 'deleted';
   }, [pathname]);
 
-  // 🔹 route type (WEB / APP / OTT_CTV)
   const routeType = useMemo(() => {
     if (!pathname) return '';
 
@@ -184,10 +182,10 @@ export default function InventoryView() {
   }, [pathname]);
 
   const pageTitle = useMemo(() => {
-    if (isDeletedRoute) return 'Inventory - Deleted';
-    if (routeType === 'APP') return 'Inventory - App';
-    if (routeType === 'WEB') return 'Inventory - Web';
-    if (routeType === 'OTT_CTV') return 'Inventory - OTT/CTV';
+    if (isDeletedRoute) return 'Inventory ';
+    if (routeType === 'APP') return 'Inventory';
+    if (routeType === 'WEB') return 'Inventory';
+    if (routeType === 'OTT_CTV') return 'Inventory';
     return 'Inventory';
   }, [routeType, isDeletedRoute]);
 
@@ -670,19 +668,48 @@ export default function InventoryView() {
     setNotesInventory(null);
     setNotesOpen(false);
   };
+      const activeType = routeType || 'all'; // 'all' | 'WEB' | 'APP' | 'OTT_CTV'
+
+  const typeLabelMap = {
+    all: 'All',
+    WEB: 'Web',
+    APP: 'App',
+    OTT_CTV: 'OTT / CTV',
+  };
+
+  const typePathMap = {
+    all: paths.dashboard.inventory?.all || paths.dashboard.inventory?.root || '#',
+    WEB: paths.dashboard.inventory?.web || '#',
+    APP: paths.dashboard.inventory?.app || '#',
+    OTT_CTV: paths.dashboard.inventory?.ott || '#',
+  };
+
+  const breadcrumbLinks = [
+    { name: 'Dashboard', href: paths.dashboard.root },
+    { name: 'Inventory', href:  paths.dashboard.inventory?.all || paths.dashboard.inventory?.root || '#' },
+  ];
+
+  if (isDeletedRoute) {
+    breadcrumbLinks.push({
+      name: 'Deleted',
+      href: paths.dashboard.inventory?.delete || paths.dashboard.inventory?.root || '#',
+    });
+  } else {
+    breadcrumbLinks.push({
+      name: typeLabelMap[activeType] || 'All',
+      href: typePathMap[activeType] || paths.dashboard.inventory?.root || '#',
+    });
+  }
 
   return (
     <DashboardContent maxWidth="xl">
       {/* HEADER */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <CustomBreadcrumbs
-          heading={pageTitle}
-          links={[
-            { name: 'Dashboard', href: paths.dashboard.root },
-            { name: 'Inventory', href: paths.dashboard.inventory?.root || '#' },
-          ]}
-          sx={{ mb: 2 }}
-        />
+       <CustomBreadcrumbs
+              heading={pageTitle}
+              links={breadcrumbLinks}
+              sx={{ mb: 2 }}
+            />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mr: '10px', mb: '16px' }}>
           <Box sx={{ display: 'flex', width: '100%', justifyContent: 'flex-end', mb: 2 }}>
             <Box
@@ -713,221 +740,209 @@ export default function InventoryView() {
 
       {/* FILTERS */}
       <Collapse in={showFilter} timeout="auto" unmountOnExit>
-        <Card sx={{ p: 2, mb: 2 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-          <PublisherSelector
-            label="Publisher"
-            placeholder="Type publisher ID or username…"
-            valueId={selectedPublisherInventoryId}
-            onInventorySelect={(inventoryId, inv) => {
-              const publisherId = inv?.publisherId || inv?.publisher?.id || '';
+  <Card sx={{ p: 2, mb: 2 }}>
+    <Box
+      sx={{
+        display: 'grid',
+        gap: 2,
+        gridTemplateColumns: {
+          xs: '1fr',
+          sm: '1fr 1fr',
+          md: '1fr 1fr 1fr 1fr',
+        },
+      }}
+    >
+            <PublisherSelector
+        label="Publisher"
+        placeholder="Type publisher ID or username…"
+      
+        valueId={filters.publisherId ? Number(filters.publisherId) : undefined}
+        onInventorySelect={(publisherId, publisher) => {
+          const finalId = publisherId || publisher?.id || '';
 
-              setSelectedPublisherInventoryId(inventoryId || undefined);
+          setFilters((prev) => ({
+            ...prev,
+            id: '',           
+            publisherId: finalId,
+          }));
+        }}
+      />
 
-              setFilters((prev) => ({
-                ...prev,
-                id: '',
-                publisherId: publisherId || '',
-              }));
+      <PartnerSelector
+        label="Partner"
+        placeholder="Type partner ID or username…"
+        valueId={filters.partnerId ? Number(filters.partnerId) : undefined}
+        onInventorySelect={(_, inv) => {
+          const partnerId = inv?.partnerId || inv?.partner?.id || '';
+          setFilters((prev) => ({
+            ...prev,
+            partnerId: partnerId || '',
+          }));
+        }}
+      />
 
-              console.log('Selected publisherId:', publisherId);
-            }}
-          />
+      <TextField
+        label="URL"
+        value={filters.url}
+        onChange={(e) =>
+          setFilters((prev) => ({
+            ...prev,
+            url: e.target.value,
+          }))
+        }
+        fullWidth
+      />
 
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>Type</InputLabel>
+        <Select
+          value={filters.type}
+          label="Type"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              type: e.target.value,
+            }))
+          }
+        >
+          {TYPES.map((s) => (
+            <MenuItem key={String(s.value)} value={s.value}>
+              {s.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <PartnerSelector
-                label="Partner"
-                placeholder="Type partner ID or username…"
-                valueId={filters.partnerId ? Number(filters.partnerId) : undefined}
-                onInventorySelect={(_, inv) => {
-                  const partnerId = inv?.partnerId || inv?.partner?.id || '';
-                  setFilters((prev) => ({
-                    ...prev,
-                    partnerId: partnerId || '',
-                  }));
-                }}
-              />
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>Status</InputLabel>
+        <Select
+          value={filters.status}
+          label="Status"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              status: e.target.value,
+            }))
+          }
+        >
+          {STATUS.map((s) => (
+            <MenuItem key={String(s.value)} value={s.value}>
+              {s.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                label="URL"
-                value={filters.url}
-                onChange={(e) =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    url: e.target.value,
-                  }))
-                }
-                fullWidth
-              />
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>Partner Status</InputLabel>
+        <Select
+          value={filters.partnerStatus}
+          label="Partner Status"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              partnerStatus: e.target.value,
+            }))
+          }
+        >
+          {PARTNER_STATUS.map((s) => (
+            <MenuItem key={String(s.value)} value={s.value}>
+              {s.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select
-                  value={filters.type}
-                  label="Type"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      type: e.target.value,
-                    }))
-                  }
-                >
-                  {TYPES.map((s) => (
-                    <MenuItem key={String(s.value)} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>ads.txt Status</InputLabel>
+        <Select
+          value={filters.adsTxtStatus}
+          label="ads.txt Status"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              adsTxtStatus: e.target.value,
+            }))
+          }
+        >
+          {ADS_TXT_STATUS.map((s) => (
+            <MenuItem key={String(s.value)} value={s.value}>
+              {s.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={filters.status}
-                  label="Status"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      status: e.target.value,
-                    }))
-                  }
-                >
-                  {STATUS.map((s) => (
-                    <MenuItem key={String(s.value)} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>Sort By</InputLabel>
+        <Select
+          value={filters.sortBy}
+          label="Sort By"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              sortBy: e.target.value,
+            }))
+          }
+        >
+          <MenuItem value="id">ID</MenuItem>
+          <MenuItem value="name">Name</MenuItem>
+          <MenuItem value="type">Type</MenuItem>
+          <MenuItem value="status">Status</MenuItem>
+          <MenuItem value="updatedAt">Updated At</MenuItem>
+          <MenuItem value="createdAt">Created At</MenuItem>
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Partner Status</InputLabel>
-                <Select
-                  value={filters.partnerStatus}
-                  label="Partner Status"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      partnerStatus: e.target.value,
-                    }))
-                  }
-                >
-                  {PARTNER_STATUS.map((s) => (
-                    <MenuItem key={String(s.value)} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      <FormControl fullWidth>
+        <InputLabel>Order</InputLabel>
+        <Select
+          value={filters.sortDir}
+          label="Order"
+          onChange={(e) =>
+            setFilters((prev) => ({
+              ...prev,
+              sortDir: e.target.value,
+            }))
+          }
+        >
+          <MenuItem value="asc">Ascending</MenuItem>
+          <MenuItem value="desc">Descending</MenuItem>
+        </Select>
+      </FormControl>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>ads.txt Status</InputLabel>
-                <Select
-                  value={filters.adsTxtStatus}
-                  label="ads.txt Status"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      adsTxtStatus: e.target.value,
-                    }))
-                  }
-                >
-                  {ADS_TXT_STATUS.map((s) => (
-                    <MenuItem key={String(s.value)} value={s.value}>
-                      {s.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      {/* Actions row – same style as other file */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <Button
+          fullWidth
+          size="medium"
+          variant="outlined"
+          onClick={handleFilterReset}
+          disabled={isLoading}
+        >
+          Reset
+        </Button>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Sort By</InputLabel>
-                <Select
-                  value={filters.sortBy}
-                  label="Sort By"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      sortBy: e.target.value,
-                    }))
-                  }
-                >
-                  <MenuItem value="id">ID</MenuItem>
-                  <MenuItem value="name">Name</MenuItem>
-                  <MenuItem value="type">Type</MenuItem>
-                  <MenuItem value="status">Status</MenuItem>
-                  <MenuItem value="updatedAt">Updated At</MenuItem>
-                  <MenuItem value="createdAt">Created At</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+        <Button
+          fullWidth
+          size="medium"
+          variant="contained"
+          onClick={handleFilterApply}
+          disabled={isLoading}
+        >
+          Apply
+        </Button>
+      </Box>
+    </Box>
+  </Card>
+</Collapse>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Order</InputLabel>
-                <Select
-                  value={filters.sortDir}
-                  label="Order"
-                  onChange={(e) =>
-                    setFilters((prev) => ({
-                      ...prev,
-                      sortDir: e.target.value,
-                    }))
-                  }
-                >
-                  <MenuItem value="asc">Ascending</MenuItem>
-                  <MenuItem value="desc">Descending</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid
-              item
-              xs={12}
-              md={12}
-              sx={{
-                gap: 1,
-                display: 'flex',
-                flexDirection: 'row',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-              }}
-            >
-              <Button
-                variant="outlined"
-                onClick={handleFilterReset}
-                disabled={isLoading}
-                sx={{ height: 48 }}
-              >
-                Reset
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleFilterApply}
-                disabled={isLoading}
-                sx={{ height: 48 }}
-              >
-                Apply
-              </Button>
-            </Grid>
-          </Grid>
-        </Card>
-      </Collapse>
 
       {/* Quick status + search */}
       <Card
@@ -1293,42 +1308,69 @@ export default function InventoryView() {
                         },
                       })}
                     >
-                      <Stack direction="row" spacing={2} alignItems="center" sx={{ minWidth: 0 }}>
-                        <Avatar
-                          alt={siteName}
-                          sx={{
-                            width: 55,
-                            height: 55,
-                            fontSize: 18,
-                            fontWeight: 600,
-                            borderRadius: 1,
-                          }}
-                          src={
-                            row.logo
-                              ? row.logo.startsWith('http')
-                                ? row.logo
-                                : `${CONFIG.assetsUrl}/upload/inventory/${row.logo}`
-                              : undefined
-                          }
-                        >
-                          {firstLetter}
-                        </Avatar>
+                  <Stack direction="row" spacing={2} alignItems="center" sx={{ minWidth: 0 }}>
+  <Avatar
+    alt={siteName}
+    sx={{
+      width: 55,
+      height: 55,
+      fontSize: 18,
+      fontWeight: 600,
+      borderRadius: 1,
+    }}
+    src={
+      row.logo
+        ? row.logo.startsWith('http')
+          ? row.logo
+          : `${CONFIG.assetsUrl}/upload/inventory/${row.logo}`
+        : undefined
+    }
+  >
+    {firstLetter}
+  </Avatar>
 
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="subtitle1" fontWeight={600} noWrap title={siteName}>
-                            {siteName}
-                          </Typography>
+  <Box sx={{ minWidth: 0 }}>
+    {/* Top row: Site name + INVENTORY STATUS pill */}
+    <Stack
+  direction="row"
+  spacing={1}
+  alignItems="center"
+  sx={{ minWidth: 0 }}
+>
+  <Typography
+    variant="subtitle1"
+    fontWeight={600}
+    noWrap
+    title={siteName}
+  >
+    {siteName}
+  </Typography>
 
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            noWrap
-                            title={row.url || '—'}
-                          >
-                            {row.url || '—'}
-                          </Typography>
-                        </Box>
-                      </Stack>
+  {/* status LOGO only in list view */}
+  <StatusChip value={row.status} iconOnly />
+</Stack>
+
+<Stack
+  direction="row"
+  spacing={1}
+  alignItems="center"
+  sx={{ minWidth: 0, mt: 0.5 }}
+>
+  <Typography
+    variant="body2"
+    color="text.secondary"
+    noWrap
+    title={row.url || '—'}
+  >
+    {row.url || '—'}
+  </Typography>
+
+  {/* ads.txt LOGO only in list view */}
+  <AdsTxtChip value={row.adsTxtStatus} iconOnly />
+</Stack>
+
+  </Box>
+</Stack>
 
                       <Box
                         sx={{
@@ -1548,202 +1590,6 @@ export default function InventoryView() {
         }}
       />
 
-      {/* View dialog */}
-      {/* <Dialog
-        fullWidth
-        maxWidth="md"
-        open={viewOpen}
-        onClose={() => setViewOpen(false)}
-        TransitionComponent={Slide}
-        TransitionProps={{ direction: 'up' }}
-        PaperProps={{
-          sx: (theme) => ({
-            borderRadius: { xs: 2, sm: 3 },
-            overflow: 'hidden',
-            boxShadow: theme.shadows[24],
-            border: `1px solid ${theme.palette.divider}`,
-            bgcolor: 'background.paper',
-          }),
-        }}
-      >
-        <DialogTitle
-          sx={{
-            py: 2,
-            px: 3,
-            typography: 'h6',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-          }}
-        >
-          <Iconify icon="mdi:calendar-plus" width={22} />
-          Inventory #{selected?.id}
-          <Box sx={{ flexGrow: 1 }} />
-          {typeof selected?.status !== 'undefined' && <StatusChip value={selected?.status} />}
-        </DialogTitle>
-
-        <DialogContent
-          dividers
-          sx={{
-            bgcolor: 'background.paper',
-            maxHeight: 800,
-            overflowY: 'auto',
-            scrollBehavior: 'smooth',
-            '&::-webkit-scrollbar': { width: 8 },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: (theme) => theme.palette.divider,
-              borderRadius: 4,
-            },
-          }}
-        >
-          {!!selected && (
-            <Stack spacing={2}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Updated on {selected.updatedAt ? fDate(selected.updatedAt) : '—'}
-              </Typography>
-
-              <Divider flexItem />
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleChangeFile}
-              />
-
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-                sx={{ mb: 3 }}
-              >
-                <Stack direction="row" alignItems="center" spacing={1.5}>
-                  <Avatar
-                    alt={
-                      selected.publisher?.username ||
-                      selected.publisher?.email ||
-                      `Publisher #${selected.publisherId}`
-                    }
-                    src={
-                      selected.publisher?.avatar
-                        ? `${CONFIG.assetsUrl}/upload/publisher/${selected.publisher.avatar}`
-                        : undefined
-                    }
-                    sx={{ width: 96, height: 96, fontSize: 20, fontWeight: 600 }}
-                  >
-                    {(selected.publisher?.username || selected.publisher?.email || `P`)
-                      .charAt(0)
-                      .toUpperCase()}
-                  </Avatar>
-
-                  <Box>
-                    <Typography variant="body1" fontWeight={600}>
-                      {selected.publisher?.username ||
-                        selected.publisher?.email ||
-                        (selected.publisherId ? `Publisher #${selected.publisherId}` : '—')}
-                    </Typography>
-
-                    {selected.publisher?.email && (
-                      <Typography variant="caption" color="text.secondary">
-                        {selected.publisher.email}
-                      </Typography>
-                    )}
-                  </Box>
-                </Stack>
-              </Stack>
-
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="overline" color="text.secondary">
-                    Identity
-                  </Typography>
-                  <Stack spacing={1.25} sx={{ mt: 0.5 }}>
-                    <Labeled label="ID">{selected.id}</Labeled>
-                    <Labeled label="Name">{selected.name || '—'}</Labeled>
-                    <Labeled label="Type">
-                      <TypeChip value={selected.type} />
-                    </Labeled>
-                    <Labeled label="URL">
-                      {selected.url ? (
-                        <Box
-                          component="a"
-                          href={selected.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          sx={{ color: 'primary.main', textDecoration: 'underline' }}
-                        >
-                          {selected.url}
-                        </Box>
-                      ) : (
-                        '—'
-                      )}
-                    </Labeled>
-                  </Stack>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="overline" color="text.secondary">
-                    Status
-                  </Typography>
-                  <Stack spacing={1.25} sx={{ mt: 0.5 }}>
-                    <Labeled label="Inventory">
-                      <StatusChip value={selected.status} />
-                    </Labeled>
-                    <Labeled label="Partner">
-                      <PartnerStatusChip value={selected.partnerStatus} />
-                    </Labeled>
-                    <Labeled label="ads.txt">
-                      <AdsTxtChip value={selected.adsTxtStatus} />
-                    </Labeled>
-                    <Labeled label="Publisher ID">{selected.publisherId ?? '—'}</Labeled>
-                    <Labeled label="Deleted">
-                      {Number(selected.is_deleted) === 1 ? 'Yes' : 'No'}
-                    </Labeled>
-                  </Stack>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography variant="overline" color="text.secondary">
-                    Timestamps
-                  </Typography>
-                  <Stack spacing={1.25} sx={{ mt: 0.5 }}>
-                    <Labeled label="Created">
-                      {selected.createdAt
-                        ? `${fDate(selected.createdAt)} ${fTime(selected.createdAt)}`
-                        : '—'}
-                    </Labeled>
-                    <Labeled label="Updated">
-                      {selected.updatedAt
-                        ? `${fDate(selected.updatedAt)} ${fTime(selected.updatedAt)}`
-                        : '—'}
-                    </Labeled>
-                  </Stack>
-                </Grid>
-              </Grid>
-            </Stack>
-          )}
-        </DialogContent>
-
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setViewOpen(false)}>Close</Button>
-          <Button
-            variant="contained"
-            startIcon={<Iconify icon="solar:pen-bold" />}
-            onClick={() => {
-              setViewOpen(false);
-              if (selected?.id) {
-                setEditId(selected.id);
-                setOpenEdit(true);
-              }
-            }}
-          >
-            Edit
-          </Button>
-        </DialogActions>
-      </Dialog> */}
-
-      {/* View dialog */}
       <Dialog
         fullWidth
         maxWidth="md"
@@ -1761,361 +1607,14 @@ export default function InventoryView() {
           }),
         }}
       >
-        {/* HEADER */}
-        <DialogTitle
-          sx={{
-            py: 2,
-            px: 3,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            bgcolor: (theme) =>
-              theme.palette.mode === 'dark'
-                ? theme.palette.background.default
-                : theme.palette.grey[100],
-            borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Iconify icon="solar:widget-4-bold-duotone" width={22} />
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="h6">Inventory #{selected?.id || '—'}</Typography>
-            {!!selected?.name && (
-              <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 260 }}>
-                {selected.name}
-              </Typography>
-            )}
-          </Box>
-
-          <Box sx={{ flexGrow: 1 }} />
-
-          {!!selected && (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TypeChip value={selected.type} />
-              {typeof selected.status !== 'undefined' && <StatusChip value={selected.status} />}
-            </Stack>
-          )}
-        </DialogTitle>
-
-        {/* CONTENT */}
-        <DialogContent
-          dividers
-          sx={{
-            bgcolor: 'background.paper',
-            maxHeight: 800,
-            overflowY: 'auto',
-            scrollBehavior: 'smooth',
-            '&::-webkit-scrollbar': { width: 8 },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: (theme) => theme.palette.divider,
-              borderRadius: 4,
-            },
-          }}
-        >
-          {!!selected && (
-            <Stack spacing={3}>
-              {/* Hidden input for logo change */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleChangeFile}
-              />
-
-              {/* HERO CARD: Logo + quick info */}
-              <Box
-                sx={(theme) => ({
-                  p: 3,
-                  borderRadius: 2,
-                  border: `1px solid ${theme.palette.divider}`,
-                  bgcolor:
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.background.default
-                      : theme.palette.action.hover,
-                  display: 'grid',
-                  gridTemplateColumns: {
-                    xs: 'auto',
-                    sm: 'auto 1fr',
-                  },
-                  gap: 2.5,
-                  alignItems: 'center',
-                })}
-              >
-                {/* Logo */}
-                <Box
-                  sx={{
-                    position: 'relative',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Avatar
-                    alt={selected.name || `Inventory #${selected.id}`}
-                    src={
-                      selected.logo
-                        ? `${CONFIG.assetsUrl}/upload/inventory/${selected.logo}`
-                        : undefined
-                    }
-                    sx={(theme) => ({
-                      width: 96,
-                      height: 96,
-                      fontSize: 26,
-                      fontWeight: 700,
-                      border: `2px solid ${theme.palette.background.paper}`,
-                      boxShadow: theme.shadows[4],
-                      cursor: 'pointer',
-                      bgcolor: theme.palette.background.paper,
-                    })}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    {(selected.name || 'I').charAt(0).toUpperCase()}
-                  </Avatar>
-
-                  <Box
-                    sx={(theme) => ({
-                      position: 'absolute',
-                      bottom: -6,
-                      right: -6,
-                      px: 1.2,
-                      py: 0.25,
-                      borderRadius: 999,
-                      bgcolor: theme.palette.background.paper,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                    >
-                      <Iconify icon="solar:pen-bold" width={13} />
-                      Change
-                    </Typography>
-                  </Box>
-                </Box>
-
-                {/* Right side summary */}
-                <Stack spacing={1} sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle1" fontWeight={600} noWrap>
-                    {selected.name || 'Untitled inventory'}
-                  </Typography>
-
-                  <Typography variant="body2" color="text.secondary">
-                    ID: {selected.id} · Type: {selected.type || '—'}
-                  </Typography>
-
-                  <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5 }}>
-                    <StatusChip value={selected.status} />
-                    <PartnerStatusChip value={selected.partnerStatus} />
-                    <AdsTxtChip value={selected.adsTxtStatus} />
-                  </Stack>
-
-                  {selected.url && (
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      <Box
-                        component="a"
-                        href={selected.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        sx={{
-                          color: 'primary.main',
-                          textDecoration: 'underline',
-                          wordBreak: 'break-all',
-                        }}
-                      >
-                        {selected.url}
-                      </Box>
-                    </Typography>
-                  )}
-
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Updated on {selected.updatedAt ? fDate(selected.updatedAt) : '—'}
-                  </Typography>
-                </Stack>
-              </Box>
-
-              {/* MAIN GRID SECTIONS */}
-              <Grid container spacing={2.5}>
-                {/* Overview */}
-                <Grid item xs={12} md={6}>
-                  <Box
-                    sx={(theme) => ({
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Overview
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Stack spacing={1.1}>
-                      <Labeled label="Inventory ID">{selected.id}</Labeled>
-                      <Labeled label="Name">{selected.name || '—'}</Labeled>
-                      <Labeled label="Type">
-                        <TypeChip value={selected.type} />
-                      </Labeled>
-                      <Labeled label="Package name">{selected.packageName || '—'}</Labeled>
-                      <Labeled label="Description">{selected.description || '—'}</Labeled>
-                    </Stack>
-                  </Box>
-                </Grid>
-
-                {/* Status & Deletion */}
-                <Grid item xs={12} md={6}>
-                  <Box
-                    sx={(theme) => ({
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Status
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Stack spacing={1.1}>
-                      <Labeled label="Inventory status">
-                        <StatusChip value={selected.status} />
-                      </Labeled>
-
-                      <Labeled label="Partner status">
-                        <PartnerStatusChip value={selected.partnerStatus} />
-                      </Labeled>
-
-                      <Labeled label="ads.txt status">
-                        <AdsTxtChip value={selected.adsTxtStatus} />
-                      </Labeled>
-
-                      <Labeled label="Deleted">
-                        {Number(selected.is_deleted) === 1 ? 'Yes' : 'No'}
-                      </Labeled>
-                    </Stack>
-                  </Box>
-                </Grid>
-
-                {/* Publisher */}
-                <Grid item xs={12} md={6}>
-                  <Box
-                    sx={(theme) => ({
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Publisher
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Stack spacing={1.1}>
-                      <Labeled label="Publisher ID">{selected.publisherId ?? '—'}</Labeled>
-
-                      <Labeled label="Publisher name">
-                        {selected.publisher?.username ||
-                          selected.publisher?.email ||
-                          (selected.publisherId ? `Publisher #${selected.publisherId}` : '—')}
-                      </Labeled>
-
-                      {selected.publisher?.email && (
-                        <Labeled label="Publisher email">{selected.publisher.email}</Labeled>
-                      )}
-                    </Stack>
-                  </Box>
-                </Grid>
-
-                {/* Links */}
-                <Grid item xs={12} md={6}>
-                  <Box
-                    sx={(theme) => ({
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Links
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Stack spacing={1.1}>
-                      <Labeled label="Inventory URL">
-                        {selected.url ? (
-                          <Box
-                            component="a"
-                            href={selected.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            sx={{
-                              color: 'primary.main',
-                              textDecoration: 'underline',
-                              wordBreak: 'break-all',
-                            }}
-                          >
-                            {selected.url}
-                          </Box>
-                        ) : (
-                          '—' //testing change
-                        )}
-                      </Labeled>
-
-                      <Labeled label="Developer website">
-                        {selected.developerWeb ? (
-                          <Box
-                            component="a"
-                            href={selected.developerWeb}
-                            target="_blank"
-                            rel="noreferrer"
-                            sx={{
-                              color: 'primary.main',
-                              textDecoration: 'underline',
-                              wordBreak: 'break-all',
-                            }}
-                          >
-                            {selected.developerWeb}
-                          </Box>
-                        ) : (
-                          '—'
-                        )}
-                      </Labeled>
-                    </Stack>
-                  </Box>
-                </Grid>
-
-                {/* Timestamps */}
-                <Grid item xs={12}>
-                  <Box
-                    sx={(theme) => ({
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                    })}
-                  >
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Timestamps
-                    </Typography>
-                    <Divider sx={{ mb: 1.5 }} />
-                    <Stack spacing={1.1}>
-                      <Labeled label="Created">
-                        {selected.createdAt
-                          ? `${fDate(selected.createdAt)} ${fTime(selected.createdAt)}`
-                          : '—'}
-                      </Labeled>
-                      <Labeled label="Last updated">
-                        {selected.updatedAt
-                          ? `${fDate(selected.updatedAt)} ${fTime(selected.updatedAt)}`
-                          : '—'}
-                      </Labeled>
-                    </Stack>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Stack>
-          )}
-        </DialogContent>
-
-        {/* ACTIONS */}
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setViewOpen(false)}>Close</Button>
-        </DialogActions>
+      <InventoryDetailsDialog
+            open={viewOpen}
+            selected={selected}
+            onClose={() => setViewOpen(false)}
+            onChangeLogoFile={async (file, row) => {
+          
+            }}
+          />
       </Dialog>
 
       {/* Delete confirm dialog */}

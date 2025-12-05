@@ -344,11 +344,7 @@ export default function PartnerInventorySelector({
               aria-disabled
               onMouseDown={(e) => e.preventDefault()}
             >
-              <Box sx={{ py: 1, width: '100%', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">
-                  — End of list ({option?.total ?? 0} items loaded) —
-                </Typography>
-              </Box>
+              
             </li>
           );
         }
