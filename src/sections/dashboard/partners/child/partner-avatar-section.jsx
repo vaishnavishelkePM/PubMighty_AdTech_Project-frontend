@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  IconButton, // 🔹 ADDED
 } from '@mui/material';
 
 import { CONFIG } from 'src/global-config';
@@ -191,9 +192,22 @@ export default function PartnerAvatarSection({
   const handleViewImage = () => {
     if (!localPreview) {
       toast.info('No profile image to view');
+    } else {
+      setViewDialogOpen(true);
+    }
+  };
+
+  // 🔹 NEW: edit-pen click → open crop on existing image (like publisher)
+  const handleEditAvatarClick = () => {
+    if (!localPreview) {
+      toast.info('No avatar to crop');
       return;
     }
-    setViewDialogOpen(true);
+    setCropImageSrc(localPreview);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setCropDialogOpen(true);
   };
 
   const handleCloseCropDialog = () => {
@@ -219,7 +233,7 @@ export default function PartnerAvatarSection({
         }}
       >
         <Stack direction="row" spacing={2} alignItems="center">
-          {/* 🔹 UPDATED: avatar is now clickable to open view dialog */}
+          {/* Avatar + edit pen (like publisher) */}
           <Box
             sx={{
               position: 'relative',
@@ -242,6 +256,25 @@ export default function PartnerAvatarSection({
             >
               {(username || '?').charAt(0).toUpperCase()}
             </Avatar>
+
+            {/* 🔹 SMALL PEN ICON (same style as publisher edit) */}
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation(); // avoid opening view dialog when clicking pen
+                handleEditAvatarClick();
+              }}
+              sx={{
+                position: 'absolute',
+                bottom: -4,
+                right: -4,
+                bgcolor: 'background.paper',
+                boxShadow: 1,
+                '&:hover': { bgcolor: 'background.paper' },
+              }}
+            >
+              <Iconify icon="mdi:pencil" width={16} />
+            </IconButton>
           </Box>
 
           <Box sx={{ flex: 1 }}>
@@ -255,14 +288,15 @@ export default function PartnerAvatarSection({
             )}
 
             <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap' }}>
+              {/* 🔹 UPLOAD BUTTON NOW MATCHES PUBLISHER DESIGN */}
               <Button
-                variant="soft"
+                variant="outlined"
                 size="small"
-                startIcon={<Iconify icon="solar:upload-linear" />}
                 onClick={handleClickUpload}
                 disabled={isUploading}
               >
-                {isUploading ? 'Uploading…' : 'Upload Photo'}
+                <Iconify icon="mdi:upload" style={{ marginRight: 8 }} />
+                {isUploading ? 'Uploading…' : 'Upload Avatar'}
               </Button>
             </Stack>
           </Box>
